@@ -1,0 +1,7 @@
+# 生成的图文使用手册包含大量内嵌截图，属于项目文档，不参与 GitHub 语言占比统计。
+祁智运平台图文使用手册.html linguist-documentation
+
+# 设计资料和交付文档不作为源代码语言统计。
+docs/** linguist-documentation
+*.docx linguist-documentation
+*.pdf linguist-documentation
