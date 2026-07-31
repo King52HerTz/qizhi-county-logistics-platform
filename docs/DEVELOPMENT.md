@@ -22,6 +22,10 @@ docker-compose.yml  PostgreSQL/PostGIS、Redis、API、Worker、Nginx 编排
 
 要求：Docker Desktop 已启动，并且 80 端口没有被其他程序占用。
 
+面向非技术使用者，优先双击项目根目录的 `安装并启动祁智运平台.bat`。该向导会检查 Docker Desktop；首次使用时打开官方安装页面并显示 WSL2、重启等提示，安装完成后再次双击即可自动启动。后续使用不需要重复安装。
+
+如果 Docker Desktop 已经安装，也可以直接双击 `启动祁智运平台.bat`。状态检查和停止操作分别使用 `检查平台状态.bat`、`停止祁智运平台.bat`。
+
 ```powershell
 Copy-Item .env.example .env
 # 首次使用前编辑 .env，至少修改数据库密码、JWT_SECRET 和管理员密码

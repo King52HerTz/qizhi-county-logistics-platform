@@ -20,6 +20,8 @@
 
 ## Docker 一键启动（推荐）
 
+非技术使用者优先双击根目录的 **`安装并启动祁智运平台.bat`**。它会检查 Docker Desktop；首次使用时打开官方安装页面并给出安装提示，安装完成后再次双击即可自动启动平台。后续使用直接双击该文件即可。
+
 ```powershell
 cd E:\wuliu_project
 Copy-Item .env.example .env
