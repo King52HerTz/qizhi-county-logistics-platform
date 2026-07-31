@@ -1,0 +1,38 @@
+[project]
+name = "qizhi-logistics-backend"
+version = "0.1.0"
+description = "Qidong county logistics AI dispatch API"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "httpx>=0.28,<1",
+  "cryptography>=44,<47",
+  "sqlalchemy>=2.0,<3",
+  "psycopg[binary]>=3.2,<4",
+  "alembic>=1.14,<2",
+  "redis>=5.2,<7",
+  "celery[redis]>=5.4,<6",
+  "pyjwt>=2.10,<3",
+  "python-multipart>=0.0.20,<1",
+  "openpyxl>=3.1,<4",
+  "ortools>=9.12,<10",
+  "pyvrp>=0.13,<0.15",
+  "xgboost-cpu>=2.1,<4; platform_system == 'Linux'",
+  "xgboost>=2.1,<4; platform_system != 'Linux'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["alembic*"]

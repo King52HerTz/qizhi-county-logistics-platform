@@ -1,0 +1,23 @@
+Metadata-Version: 2.4
+Name: qizhi-logistics-backend
+Version: 0.1.0
+Summary: Qidong county logistics AI dispatch API
+Requires-Python: >=3.11
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: uvicorn[standard]<1,>=0.34
+Requires-Dist: pydantic<3,>=2.10
+Requires-Dist: pydantic-settings<3,>=2.7
+Requires-Dist: httpx<1,>=0.28
+Requires-Dist: cryptography<47,>=44
+Requires-Dist: sqlalchemy<3,>=2.0
+Requires-Dist: psycopg[binary]<4,>=3.2
+Requires-Dist: alembic<2,>=1.14
+Requires-Dist: redis<7,>=5.2
+Requires-Dist: celery[redis]<6,>=5.4
+Requires-Dist: pyjwt<3,>=2.10
+Requires-Dist: python-multipart<1,>=0.0.20
+Requires-Dist: openpyxl<4,>=3.1
+Requires-Dist: ortools<10,>=9.12
+Requires-Dist: pyvrp<0.15,>=0.13
+Provides-Extra: dev
+Requires-Dist: pytest<9,>=8.3; extra == "dev"

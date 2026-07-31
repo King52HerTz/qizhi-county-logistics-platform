@@ -1,0 +1,6 @@
+__pycache__
+.pytest_cache
+*.pyc
+*.db
+tests
+qizhi_logistics_backend.egg-info

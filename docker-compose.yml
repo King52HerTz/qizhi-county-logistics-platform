@@ -1,0 +1,118 @@
+name: qizhi-logistics
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-qizhi}
+      POSTGRES_USER: ${POSTGRES_USER:-qizhi_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-owner-password}
+      APP_DB_USER: ${APP_DB_USER:-qizhi_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-qizhi_app_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qizhi_owner} -d ${POSTGRES_DB:-qizhi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [qizhi]
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [qizhi]
+
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment: &backend_environment
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://${APP_DB_USER:-qizhi_app}:${APP_DB_PASSWORD:-qizhi_app_dev}@db:5432/${POSTGRES_DB:-qizhi}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-to-a-long-random-secret-at-least-32-bytes}
+      AI_CONFIG_ENCRYPTION_KEY: ${AI_CONFIG_ENCRYPTION_KEY:-2zABIYriBfY15nURf4URELMvGWufFcGLcG-zwCYsxp4=}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-QizhiDemo2026!}
+      DRIVER_USERNAME: ${DRIVER_USERNAME:-driver}
+      DRIVER_PASSWORD: ${DRIVER_PASSWORD:-DriverDemo2026!}
+      CORS_ORIGINS: http://localhost,http://127.0.0.1
+      ROUTING_PROVIDER: ${ROUTING_PROVIDER:-osrm}
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-https://router.project-osrm.org}
+      OSRM_PROFILE: ${OSRM_PROFILE:-driving}
+      OSRM_TIMEOUT_SECONDS: ${OSRM_TIMEOUT_SECONDS:-4}
+      ROUTING_CACHE_SIZE: ${ROUTING_CACHE_SIZE:-128}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    networks: [qizhi]
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment: *backend_environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [qizhi]
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["celery", "-A", "app.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment: *backend_environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app:celery_app inspect ping -d celery@$$HOSTNAME --timeout=5 | grep -q pong"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+    networks: [qizhi]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: /api/v1
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [qizhi]
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  qizhi:
+    driver: bridge
