@@ -12,14 +12,14 @@ import OperationGuide from './components/OperationGuide.vue'
 import {
   activateScenario, clearAdminSession, downloadScenarioTemplate, explainRun,
   getAIConfig, getCurrentWeather, getDemandForecast, getLatestRun, getRoutingStatus, getRunHistory, getScenario,
-  getScenarioSpatialStatus,
+  getQidongReferenceSummary, getScenarioSpatialStatus,
   getScenarioVersions, getSessionRole, getSessionUser, hasSession, logout,
   login, optimizeScenario, reoptimizeScenario, saveAIConfig, testAIConfig,
   uploadScenario,
 } from './services/api'
 import type {
   AIConfigView, AIExplanationResponse, CurrentWeather, DemandForecast, OptimizeResult, RoutingStatus,
-  RunSummary, Scenario, ScenarioSpatialStatus, ScenarioVersionView,
+  QidongReferenceSummary, RunSummary, Scenario, ScenarioSpatialStatus, ScenarioVersionView,
 } from './types/logistics'
 
 const MasterDataCenter = defineAsyncComponent(() => import('./components/MasterDataCenter.vue'))
@@ -129,6 +129,7 @@ const aiExplanation = ref<AIExplanationResponse>()
 const explanationBusyRun = ref('')
 const forecast = ref<DemandForecast>()
 const routingStatus = ref<RoutingStatus>()
+const referenceSummary = ref<QidongReferenceSummary>()
 const spatialStatus = ref<ScenarioSpatialStatus>()
 const weather = ref<CurrentWeather>()
 const weatherLoading = ref(true)
@@ -300,6 +301,12 @@ async function loadDecisionData() {
   ])
   forecast.value = forecastResult
   routingStatus.value = routingResult
+  try {
+    referenceSummary.value = await getQidongReferenceSummary()
+  } catch {
+    // The reference layer is supplementary; an older backend must not block the cockpit.
+    referenceSummary.value = undefined
+  }
 }
 
 async function refreshWeather() {
@@ -661,6 +668,7 @@ async function signOut() {
   sessionUser.value = ''
   scenario.value = undefined
   result.value = undefined
+  referenceSummary.value = undefined
   weather.value = undefined
   activeView.value = 'overview'
   await router.replace('/login')
@@ -671,6 +679,7 @@ onMounted(async () => {
     authenticated.value = false
     scenario.value = undefined
     result.value = undefined
+    referenceSummary.value = undefined
     await router.replace('/login')
   })
   if (demoResetRequested) {
@@ -775,6 +784,7 @@ watch(() => route.name, () => {
             :result="result"
             :forecast="forecast"
             :routing-status="routingStatus"
+            :reference-summary="referenceSummary"
             :busy="loading"
             @dispatch="generateTodayDispatch"
           />

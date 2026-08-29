@@ -244,8 +244,8 @@ function Reset-Platform {
     Set-Location -LiteralPath $projectRoot
 
     Write-Host "此操作将恢复以下标准状态：" -ForegroundColor Yellow
-    Write-Host "  · 18 个已校准物流节点"
-    Write-Host "  · 12 个待调度订单"
+    Write-Host "  · 18 个县内校准物流节点"
+    Write-Host "  · 16 个参考需求演示订单（约 8.3 吨）"
     Write-Host "  · 5 台可用车辆"
     Write-Host "  · 管理员和驾驶员标准账号"
     Write-Host "  · 清空已产生的审批、执行和历史记录"

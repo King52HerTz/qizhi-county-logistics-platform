@@ -157,6 +157,7 @@ def run_experiment(
             solved = solve_scenario(
                 variant,
                 time_limit_seconds=request.time_limit_seconds,
+                deterministic=True,
             )
             baseline_distance = solved.baseline_metrics.distance_km
             optimized_distance = solved.metrics.distance_km

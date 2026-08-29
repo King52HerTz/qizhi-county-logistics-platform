@@ -366,6 +366,78 @@ export interface MasterDataSummary {
   active_nodes: number
 }
 
+export interface ReferenceWeight {
+  code: string
+  label: string
+  weight: number
+}
+
+export interface ReferenceDemandPoint {
+  town_name: string
+  village_count: number
+  demand_tons: number
+  share_percent: number
+}
+
+export interface ReferenceCandidate {
+  rank: number
+  town_name: string
+  score: number
+  level: string
+  candidate_type: 'core' | 'remote_safeguard'
+  demand_tons?: number
+  rationale: string
+}
+
+export interface ReferenceCoordinateQuality {
+  total_nodes: number
+  inside_bounds: number
+  outside_bounds: number
+  duplicate_nodes: number
+  flagged_node_ids: string[]
+  status: 'verified' | 'needs_review'
+  note: string
+}
+
+export interface ReferenceFacility {
+  level: string
+  name: string
+  count: number
+  status: string
+  function: string
+  coverage_percent?: number
+}
+
+export interface QidongReferenceSummary {
+  dataset_version: string
+  source_scope: string
+  service_circle_minutes: number
+  township_count: number
+  village_units: number
+  town_logistics_stations: number
+  township_ecommerce_stations: number
+  field_cold_stores: number
+  village_service_stations: number
+  co_delivery_stations: number
+  county_facility_count: number
+  village_coverage_percent: number
+  road_total_km: number
+  road_density_km_per_sq_km: number
+  demand_unit: string
+  reference_demand_tons: number
+  demo_load_ratio: number
+  demo_order_count: number
+  demo_order_weight_kg: number
+  demo_mapped_town_count: number
+  demand_summary: ReferenceDemandPoint[]
+  ahp_weights: ReferenceWeight[]
+  candidates: ReferenceCandidate[]
+  facility_summary: ReferenceFacility[]
+  facility_gaps: string[]
+  coordinate_quality: ReferenceCoordinateQuality
+  notes: string[]
+}
+
 export type DataImportStatus = 'validated' | 'rejected' | 'committed'
 
 export interface DataImportError {

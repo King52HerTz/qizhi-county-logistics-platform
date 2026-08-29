@@ -61,3 +61,11 @@ desktop.ini
 *.temp
 *.swp
 *.swo
+
+# Local extra documents
+新增资料/
+
+# Locally generated office documents and design deliverables
+*.docx
+*.doc
+*.pptx

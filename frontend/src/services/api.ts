@@ -50,6 +50,7 @@ import type {
   MasterVehicleCreate,
   MasterVehicleInput,
   MasterVehicleList,
+  QidongReferenceSummary,
   OperationsReadiness,
   MapConfigInput,
   MapConfigList,
@@ -192,6 +193,9 @@ export async function downloadAuditLogs(params = '') {
 
 export const getMasterDataSummary = () =>
   authenticatedRequest<MasterDataSummary>('/master-data/summary')
+
+export const getQidongReferenceSummary = () =>
+  authenticatedRequest<QidongReferenceSummary>('/reference/qidong-summary')
 
 export const getMasterOrders = (params = '') =>
   authenticatedRequest<MasterOrderList>(`/master-data/orders${params ? `?${params}` : ''}`)

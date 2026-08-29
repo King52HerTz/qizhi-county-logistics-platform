@@ -60,11 +60,18 @@ def calculate_decision_score(
     *,
     order_count: int,
     unassigned_count: int,
+    urgent_order_count: int,
+    unassigned_urgent_count: int,
     available_vehicle_count: int,
 ) -> DecisionScore:
     service_rate = (
         100 * max(0, order_count - unassigned_count) / order_count
         if order_count
+        else 100
+    )
+    urgent_service_rate = (
+        100 * max(0, urgent_order_count - unassigned_urgent_count) / urgent_order_count
+        if urgent_order_count
         else 100
     )
     distance_improvement = (
@@ -79,7 +86,12 @@ def calculate_decision_score(
         if baseline.estimated_cost_cny > 0
         else 0
     )
-    service_score = round(min(40.0, max(0.0, service_rate * 0.4)), 1)
+
+    # 基础服务分 (满分30)
+    service_score = round(min(30.0, max(0.0, service_rate * 0.3)), 1)
+    # 紧急订单保障分 (满分10)
+    priority_score = round(min(10.0, max(0.0, urgent_service_rate * 0.1)), 1)
+
     distance_score = round(
         min(25.0, max(0.0, distance_improvement / 30 * 25)),
         1,
@@ -107,10 +119,17 @@ def calculate_decision_score(
     components = [
         DecisionScoreComponent(
             key="service",
-            name="订单服务与约束满足",
+            name="订单服务保障",
             score=service_score,
-            weight=40,
+            weight=30,
             detail=f"服务率 {service_rate:.1f}%，未分配 {unassigned_count} 单",
+        ),
+        DecisionScoreComponent(
+            key="priority",
+            name="高优订单满足",
+            score=priority_score,
+            weight=10,
+            detail=f"加急订单满足率 {urgent_service_rate:.1f}%",
         ),
         DecisionScoreComponent(
             key="distance",
@@ -338,6 +357,11 @@ def solve_scenario(
 
     for order_idx, order in enumerate(orders, start=1):
         index = manager.NodeToIndex(order_idx)
+
+        # 增加对紧急订单的保护，允许掉单但加急订单的惩罚极大
+        penalty = 5_000_000 if order.priority == "urgent" else 100_000
+        routing.AddDisjunction([index], penalty)
+
         time_dimension.CumulVar(index).SetRange(order.window_start, order.window_end)
         if order.cold_chain:
             allowed = [idx for idx, vehicle in enumerate(vehicles) if vehicle.cold_chain]
@@ -450,11 +474,16 @@ def solve_scenario(
             else "求解使用当前场景版本内的不可变坐标。"
         ),
     ]
+    urgent_orders = [order for order in orders if order.priority == "urgent"]
+    unassigned_urgent = [oid for oid in unassigned if any(o.id == oid for o in urgent_orders)]
+
     decision_score = calculate_decision_score(
         metrics,
         baseline,
         order_count=len(orders),
         unassigned_count=len(unassigned),
+        urgent_order_count=len(urgent_orders),
+        unassigned_urgent_count=len(unassigned_urgent),
         available_vehicle_count=len(vehicles),
     )
     return OptimizeResponse(

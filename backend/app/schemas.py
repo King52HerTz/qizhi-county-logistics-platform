@@ -227,6 +227,78 @@ class MasterDataSummary(BaseModel):
     active_nodes: int
 
 
+class ReferenceWeightView(BaseModel):
+    code: str
+    label: str
+    weight: float = Field(ge=0, le=1)
+
+
+class ReferenceDemandPoint(BaseModel):
+    town_name: str
+    village_count: int = Field(ge=0)
+    demand_tons: float = Field(ge=0)
+    share_percent: float = Field(ge=0, le=100)
+
+
+class ReferenceCandidateView(BaseModel):
+    rank: int = Field(ge=1)
+    town_name: str
+    score: float = Field(ge=0, le=10)
+    level: str
+    candidate_type: Literal["core", "remote_safeguard"]
+    demand_tons: float | None = Field(default=None, ge=0)
+    rationale: str
+
+
+class ReferenceCoordinateQuality(BaseModel):
+    total_nodes: int = Field(ge=0)
+    inside_bounds: int = Field(ge=0)
+    outside_bounds: int = Field(ge=0)
+    duplicate_nodes: int = Field(ge=0)
+    flagged_node_ids: list[str] = []
+    status: Literal["verified", "needs_review"]
+    note: str
+
+
+class ReferenceFacilityView(BaseModel):
+    level: str
+    name: str
+    count: int = Field(ge=0)
+    status: str
+    function: str
+    coverage_percent: float | None = Field(default=None, ge=0, le=100)
+
+
+class QidongReferenceSummary(BaseModel):
+    dataset_version: str
+    source_scope: str
+    service_circle_minutes: int = Field(gt=0)
+    township_count: int = Field(gt=0)
+    village_units: int = Field(gt=0)
+    town_logistics_stations: int = Field(ge=0)
+    township_ecommerce_stations: int = Field(ge=0)
+    field_cold_stores: int = Field(ge=0)
+    village_service_stations: int = Field(ge=0)
+    co_delivery_stations: int = Field(ge=0)
+    county_facility_count: int = Field(ge=0)
+    village_coverage_percent: float = Field(ge=0, le=100)
+    road_total_km: float = Field(ge=0)
+    road_density_km_per_sq_km: float = Field(ge=0)
+    demand_unit: str
+    reference_demand_tons: float = Field(ge=0)
+    demo_load_ratio: float = Field(gt=0, le=1)
+    demo_order_count: int = Field(ge=0)
+    demo_order_weight_kg: int = Field(ge=0)
+    demo_mapped_town_count: int = Field(ge=0)
+    demand_summary: list[ReferenceDemandPoint]
+    ahp_weights: list[ReferenceWeightView]
+    candidates: list[ReferenceCandidateView]
+    facility_summary: list[ReferenceFacilityView]
+    facility_gaps: list[str]
+    coordinate_quality: ReferenceCoordinateQuality
+    notes: list[str] = []
+
+
 class DataImportErrorView(BaseModel):
     row: int
     field: str

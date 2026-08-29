@@ -40,9 +40,13 @@ def seed_demo_data(session: Session) -> None:
                 activated_at=datetime.now(timezone.utc),
             )
         )
-    if session.get(NodeRecord, scenario.nodes[0].id) is None:
-        session.add_all(
-            [
+    # Existing databases can contain an older scenario's depot, so checking
+    # only the first node would skip newly added route nodes and violate the
+    # orders -> logistics_nodes foreign key. Add only missing master nodes and
+    # preserve coordinates already maintained by the operator.
+    for node in scenario.nodes:
+        if session.get(NodeRecord, node.id) is None:
+            session.add(
                 NodeRecord(
                     id=node.id,
                     name=node.name,
@@ -54,10 +58,8 @@ def seed_demo_data(session: Session) -> None:
                     calibrated_at=scenario.spatial_snapshot_at,
                     kind=node.kind,
                 )
-                for node in scenario.nodes
-            ]
-        )
-        session.flush()
+            )
+    session.flush()
     for vehicle in scenario.vehicles:
         if session.get(VehicleRecord, vehicle.id) is None:
             session.add(

@@ -22,6 +22,7 @@ from app.analytics import build_demand_forecast
 from app.celery_app import celery_app
 from app.competition_service import build_competition_readiness, build_competition_report
 from app.config import get_settings
+from app.data.qidong_reference import build_qidong_reference_summary
 from app.db import SessionLocal, get_db, initialize_database
 from app.dispatch_service import (
     DispatchWorkflowError,
@@ -129,6 +130,7 @@ from app.schemas import (
     DataQualityRuleUpdate,
     DataQualityRuleView,
     MasterDataSummary,
+    QidongReferenceSummary,
     MasterDataPublishRequest,
     MasterDataPublishResponse,
     MasterNodeCreate,
@@ -1426,6 +1428,17 @@ def master_data_summary(
             select(func.count(NodeRecord.id)).where(NodeRecord.is_active.is_(True))
         )
         or 0,
+    )
+
+
+@app.get("/api/v1/reference/qidong-summary", response_model=QidongReferenceSummary)
+def qidong_reference_summary(
+    _: UserRecord = Depends(current_user),
+    session: Session = Depends(get_db),
+) -> QidongReferenceSummary:
+    """Return the curated research baseline without exposing raw source files."""
+    return QidongReferenceSummary.model_validate(
+        build_qidong_reference_summary(load_scenario(session))
     )
 
 

@@ -960,6 +960,8 @@ onBeforeUnmount(() => {
 .map-filters {
   display: flex;
   gap: 5px;
+  flex: 0 0 auto;
+  min-width: max-content;
 }
 .map-filters button,
 .map-source button {
@@ -974,6 +976,19 @@ onBeforeUnmount(() => {
   color: #53675b;
   font: 700 10px/1 inherit;
   cursor: pointer;
+}
+.map-filters button {
+  flex: 0 0 auto;
+  min-width: 58px;
+  justify-content: center;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+.map-filters button:first-child {
+  min-width: 82px;
+}
+.map-filters button svg {
+  flex: 0 0 auto;
 }
 .map-filters button:hover,
 .map-filters button.active {
@@ -1400,7 +1415,13 @@ onBeforeUnmount(() => {
     grid-column: 1/-1;
   }
   .map-filters {
+    min-width: 0;
+    max-width: 100%;
     overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .map-filters::-webkit-scrollbar {
+    display: none;
   }
   .route-inspector {
     width: 225px;
