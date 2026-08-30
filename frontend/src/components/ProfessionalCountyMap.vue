@@ -538,15 +538,11 @@ async function initialize() {
   } catch {
     /* permission/network fallback */
   }
-  const useShareSafeMap = isEphemeralShareHost();
-  if (useShareSafeMap && runtime.mode === "online") {
-    sourceMessage.value = "公网共享运营地图";
-  }
+  const temporaryShare = isEphemeralShareHost();
   if (
     runtime.mode === "online" &&
     runtime.provider === "amap" &&
-    runtime.web_key &&
-    !useShareSafeMap
+    runtime.web_key
   ) {
     try {
       await loadAmapScript(runtime);
@@ -562,7 +558,9 @@ async function initialize() {
       sourceMessage.value = "高德道路地图";
       await drawAmap("all");
     } catch {
-      loadWarning.value = "道路地图连接失败，已自动切换到离线地图";
+      loadWarning.value = temporaryShare
+        ? "当前分享域名尚未加入高德白名单，已切换到县域地图；加入后刷新即可显示高德道路图"
+        : "道路地图连接失败，已自动切换到离线地图";
     }
   }
   if (source.value === "offline") {
