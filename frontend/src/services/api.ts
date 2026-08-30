@@ -56,6 +56,9 @@ import type {
   MapConfigList,
   MapConfigView,
   MapRuntimeConfig,
+  OrderRequest,
+  OrderRequestList,
+  OrderRequestNodeOption,
 } from '../types/logistics'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api/v1'
@@ -111,7 +114,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 async function authenticatedRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = storedValue(TOKEN_KEY)
-  if (!token) throw new Error('请先使用管理员账号登录')
+  if (!token) throw new Error('请先登录')
   return request<T>(path, {
     ...init,
     headers: {
@@ -160,6 +163,45 @@ export async function logout() {
     clearStoredSession()
   }
 }
+
+export const getOrderRequestOptions = () =>
+  authenticatedRequest<{ items: OrderRequestNodeOption[] }>('/order-requests/options')
+export const createOrderRequest = (input: {
+  node_id: string
+  cargo_name: string
+  customer_name: string
+  customer_phone?: string
+  delivery_address?: string
+  weight_kg: number
+  window_start: number
+  window_end: number
+  service_minutes: number
+  cold_chain: boolean
+  priority: 'normal' | 'urgent'
+}) =>
+  authenticatedRequest<OrderRequest>('/order-requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+export const getMyOrderRequests = () =>
+  authenticatedRequest<OrderRequestList>('/order-requests/mine?limit=50')
+export const getOrderRequests = (status = '') =>
+  authenticatedRequest<OrderRequestList>(
+    `/order-requests?limit=100${status ? `&status=${encodeURIComponent(status)}` : ''}`,
+  )
+export const reviewOrderRequest = (
+  id: number,
+  action: 'approve' | 'reject' | 'needs_info',
+  note?: string,
+) =>
+  authenticatedRequest<OrderRequest>(`/order-requests/${id}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ action, note }),
+  })
+export const cancelOrderRequest = (id: number) =>
+  authenticatedRequest<OrderRequest>(`/order-requests/${id}/cancel`, {
+    method: 'POST',
+  })
 
 export const getUsers = (params = '') =>
   authenticatedRequest<ManagedUserList>(`/users${params ? `?${params}` : ''}`)

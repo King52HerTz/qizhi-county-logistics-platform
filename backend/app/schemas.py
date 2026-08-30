@@ -99,6 +99,83 @@ class MasterOrderList(BaseModel):
     total: int
 
 
+OrderRequestStatus = Literal[
+    "pending_review",
+    "needs_info",
+    "rejected",
+    "converted",
+    "cancelled",
+]
+
+
+class OrderRequestCreate(BaseModel):
+    node_id: str = Field(min_length=1, max_length=32)
+    cargo_name: str = Field(min_length=1, max_length=120)
+    customer_name: str = Field(min_length=1, max_length=120)
+    customer_phone: str | None = Field(default=None, max_length=32)
+    delivery_address: str | None = Field(default=None, max_length=300)
+    weight_kg: int = Field(gt=0, le=100000)
+    window_start: int = Field(ge=0, le=1439)
+    window_end: int = Field(gt=0, le=1440)
+    service_minutes: int = Field(default=8, ge=0, le=240)
+    cold_chain: bool = False
+    priority: Literal["normal", "urgent"] = "normal"
+
+    @model_validator(mode="after")
+    def validate_time_window(self) -> "OrderRequestCreate":
+        if self.window_end <= self.window_start:
+            raise ValueError("服务时间窗结束时间必须晚于开始时间")
+        return self
+
+
+class OrderRequestReviewRequest(BaseModel):
+    action: Literal["approve", "reject", "needs_info"]
+    note: str | None = Field(default=None, max_length=500)
+
+
+class OrderRequestNodeOption(BaseModel):
+    id: str
+    name: str
+    address: str | None = None
+    kind: Literal["depot", "town", "village", "processor"]
+
+
+class OrderRequestNodeOptionList(BaseModel):
+    items: list[OrderRequestNodeOption]
+
+
+class OrderRequestView(BaseModel):
+    id: int
+    request_code: str
+    requester_username: str
+    requester_name: str
+    node_id: str
+    node_name: str
+    cargo_name: str
+    customer_name: str
+    customer_phone: str | None
+    delivery_address: str | None
+    weight_kg: int
+    window_start: int
+    window_end: int
+    service_minutes: int
+    cold_chain: bool
+    priority: Literal["normal", "urgent"]
+    status: OrderRequestStatus
+    review_note: str | None
+    reviewer_username: str | None
+    reviewed_at: datetime | None
+    operational_order_id: str | None
+    operational_status: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OrderRequestList(BaseModel):
+    items: list[OrderRequestView]
+    total: int
+
+
 class MasterVehicleInput(BaseModel):
     plate: str = Field(min_length=2, max_length=32)
     capacity_kg: int = Field(gt=0, le=100000)
@@ -672,14 +749,14 @@ class CurrentUserView(BaseModel):
 class UserCreate(BaseModel):
     username: str = Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_.-]{2,63}$")
     display_name: str = Field(min_length=2, max_length=100)
-    role: Literal["admin", "dispatcher", "driver", "viewer"]
+    role: Literal["admin", "dispatcher", "driver", "viewer", "user"]
     password: str = Field(min_length=12, max_length=128)
     is_active: bool = True
 
 
 class UserUpdate(BaseModel):
     display_name: str = Field(min_length=2, max_length=100)
-    role: Literal["admin", "dispatcher", "driver", "viewer"]
+    role: Literal["admin", "dispatcher", "driver", "viewer", "user"]
     is_active: bool
     unlock: bool = False
 

@@ -44,7 +44,7 @@ class UserRecord(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "role in ('admin','dispatcher','driver','viewer')",
+            "role in ('admin','dispatcher','driver','viewer','user')",
             name="users_role_check",
         ),
         Index("users_role_active_idx", "role", "is_active"),
@@ -216,6 +216,66 @@ class OrderRecord(Base):
         Index("orders_status_created_idx", "status", "created_at"),
         Index("orders_priority_cold_updated_idx", "priority", "cold_chain", "updated_at"),
         Index("orders_pending_time_idx", "window_start", postgresql_where=(status == "pending")),
+    )
+
+
+class OrderRequestRecord(Base):
+    """A customer-facing order request before it becomes an operational order."""
+
+    __tablename__ = "order_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    request_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    requester_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    node_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("logistics_nodes.id", ondelete="RESTRICT"), nullable=False
+    )
+    cargo_name: Mapped[str] = mapped_column(Text, nullable=False)
+    customer_name: Mapped[str] = mapped_column(Text, nullable=False)
+    customer_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    weight_kg: Mapped[int] = mapped_column(Integer, nullable=False)
+    window_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    window_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    service_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
+    cold_chain: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending_review")
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    operational_order_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+    requester: Mapped[UserRecord] = relationship(foreign_keys=[requester_id])
+    reviewer: Mapped[UserRecord | None] = relationship(foreign_keys=[reviewed_by])
+    node: Mapped[NodeRecord] = relationship()
+    operational_order: Mapped[OrderRecord | None] = relationship(
+        foreign_keys=[operational_order_id]
+    )
+
+    __table_args__ = (
+        CheckConstraint("weight_kg > 0", name="order_requests_weight_positive"),
+        CheckConstraint("window_end > window_start", name="order_requests_window_check"),
+        CheckConstraint("service_minutes >= 0", name="order_requests_service_nonnegative"),
+        CheckConstraint("priority in ('normal','urgent')", name="order_requests_priority_check"),
+        CheckConstraint(
+            "status in ('pending_review','needs_info','rejected','converted','cancelled')",
+            name="order_requests_status_check",
+        ),
+        Index("order_requests_requester_created_idx", "requester_id", "created_at"),
+        Index("order_requests_status_created_idx", "status", "created_at"),
+        Index("order_requests_node_id_idx", "node_id"),
+        Index("order_requests_operational_order_idx", "operational_order_id"),
     )
 
 

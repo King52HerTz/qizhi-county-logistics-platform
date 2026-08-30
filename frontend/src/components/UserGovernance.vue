@@ -36,12 +36,14 @@ const roleNames: Record<UserRole, string> = {
   dispatcher: '调度员',
   driver: '驾驶员',
   viewer: '只读访客',
+  user: '注册用户',
 }
 const permissionMap: Record<UserRole, Array<[string, string]>> = {
   admin: [['运营与调度', '完整访问'], ['场景与算法', '完整访问'], ['系统设置', '管理']],
   dispatcher: [['运营总览', '查看'], ['智能调度', '创建、查看'], ['执行中心', '提交与下发']],
   driver: [['驾驶任务', '查看与执行'], ['其他模块', '无访问权限']],
   viewer: [['运营总览', '只读'], ['历史方案', '只读'], ['管理功能', '无访问权限']],
+  user: [['订单申请', '提交与跟踪'], ['运营数据', '无访问权限']],
 }
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const passwordValid = computed(() =>

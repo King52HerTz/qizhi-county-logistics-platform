@@ -70,7 +70,7 @@ async function submit() {
         <div class="story-copy">
           <p class="story-kicker"><Sparkles :size="16" /> 统一身份与权限管理</p>
           <h1>创建专属账号，<br />进入协同运营空间</h1>
-          <p>新账号默认采用最小权限策略，可查看个人任务、路线与运行信息；敏感配置及管理操作仅对授权人员开放。</p>
+          <p>新账号默认采用最小权限策略，仅可提交配送申请并跟踪本人订单；调度、审批与敏感配置仅对授权人员开放。</p>
         </div>
         <div class="security-list">
           <div><ShieldCheck :size="19" /><span><b>最小权限</b><small>公开注册无法获取管理员权限</small></span></div>
@@ -86,8 +86,8 @@ async function submit() {
         <div class="register-heading">
           <div class="register-icon"><UserPlus :size="23" /></div>
           <p>创建账号</p>
-          <h2>注册运营用户</h2>
-          <span>填写基本信息，注册成功后将自动登录</span>
+          <h2>注册用户账号</h2>
+          <span>注册成功后可提交配送申请并跟踪处理进度</span>
         </div>
         <form @submit.prevent="submit">
           <div class="field-row">

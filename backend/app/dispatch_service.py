@@ -11,6 +11,7 @@ from app.models import (
     DispatchTransitionRecord,
     DriverAssignmentRecord,
     OptimizationRunRecord,
+    OrderRecord,
     UserRecord,
 )
 from app.schemas import DispatchPlanView, DriverAssignmentView
@@ -44,6 +45,25 @@ def _log_transition(
             note=note,
         )
     )
+
+
+def _update_route_orders(session: Session, route_payload: dict, status: str) -> None:
+    """Keep master orders aligned with the operational execution lifecycle."""
+    order_ids = {
+        str(stop.get("order_id"))
+        for stop in route_payload.get("stops", [])
+        if stop.get("order_id")
+    }
+    if not order_ids:
+        return
+    records = session.scalars(
+        select(OrderRecord).where(OrderRecord.id.in_(order_ids))
+    ).all()
+    for record in records:
+        if status == "planned" and record.status == "pending":
+            record.status = "planned"
+        elif status == "completed" and record.status in {"pending", "planned"}:
+            record.status = "completed"
 
 
 def get_plan(session: Session, plan_id: int, *, lock: bool = False) -> DispatchPlanRecord:
@@ -162,6 +182,7 @@ def dispatch_plan(
     if not routes:
         raise DispatchWorkflowError("方案没有可下发路线")
     for route_index, route in enumerate(routes):
+        _update_route_orders(session, route, "planned")
         session.add(
             DriverAssignmentRecord(
                 plan_id=plan.id,
@@ -240,6 +261,7 @@ def advance_assignment(
     else:
         assignment.completed_at = moment
         assignment.completion_note = note or "配送任务已完成"
+        _update_route_orders(session, assignment.route_payload, "completed")
     session.flush()
     _log_transition(
         session,

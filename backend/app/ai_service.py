@@ -50,19 +50,19 @@ def request_completion(
     timeout_seconds: float = 20,
 ) -> tuple[str, int]:
     started = perf_counter()
-    headers = {
-        "Authorization": f"Bearer {decrypt_secret(config.encrypted_api_key)}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": config.model_name,
-        "temperature": float(config.temperature),
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-    }
     try:
+        headers = {
+            "Authorization": f"Bearer {decrypt_secret(config.encrypted_api_key)}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": config.model_name,
+            "temperature": float(config.temperature),
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
         with httpx.Client(timeout=timeout_seconds) as client:
             response = client.post(_completion_url(config.base_url), headers=headers, json=payload)
             response.raise_for_status()

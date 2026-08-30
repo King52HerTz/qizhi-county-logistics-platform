@@ -5,7 +5,7 @@ import json
 from sqlalchemy import delete, select, text
 
 from app.config import get_settings
-from app.db import SessionLocal
+from app.db import SessionLocal, initialize_database
 from app.experiment_service import run_experiment
 from app.models import (
     AlgorithmExperimentRecord,
@@ -19,6 +19,7 @@ from app.models import (
     NodeRecord,
     OptimizationRunRecord,
     OrderRecord,
+    OrderRequestRecord,
     ScenarioTransitionRecord,
     ScenarioVersionRecord,
     UserRecord,
@@ -34,6 +35,12 @@ def reset_demo_data() -> dict[str, object]:
     settings = get_settings()
     preserved_users = (settings.admin_username, settings.driver_username)
 
+    # The standalone reset command is also used by the local one-click demo
+    # launcher.  Bring the schema to the current revision before touching any
+    # rows so a fresh checkout can be restored without a separate migration
+    # step.
+    initialize_database()
+
     with SessionLocal() as session:
         for model in (
             DispatchTransitionRecord,
@@ -46,6 +53,7 @@ def reset_demo_data() -> dict[str, object]:
             ScenarioVersionRecord,
             NodeCoordinateRevisionRecord,
             DataImportBatchRecord,
+            OrderRequestRecord,
             OrderRecord,
             VehicleRecord,
             NodeRecord,

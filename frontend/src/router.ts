@@ -4,6 +4,11 @@ import { getSessionRole, hasSession } from './services/api'
 const PlatformShell = () => import('./App.vue')
 const LoginRoute = () => import('./components/LoginRoute.vue')
 const RegisterRoute = () => import('./components/RegisterRoute.vue')
+const UserOrderRoute = () => import('./components/UserOrderRoute.vue')
+
+function homeForRole(role: string) {
+  return role === 'user' ? '/my-orders' : role === 'driver' ? '/execution' : '/overview'
+}
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -11,12 +16,24 @@ export const router = createRouter({
     { path: '/', redirect: '/overview' },
     { path: '/login', name: 'login', component: LoginRoute, meta: { public: true } },
     { path: '/register', name: 'register', component: RegisterRoute, meta: { public: true } },
-    { path: '/overview', name: 'overview', component: PlatformShell },
-    { path: '/dispatch', name: 'dispatch', component: PlatformShell },
-    { path: '/events', name: 'events', component: PlatformShell },
-    { path: '/execution', name: 'execution', component: PlatformShell },
-    { path: '/experiments', name: 'experiments', component: PlatformShell },
-    { path: '/history', name: 'history', component: PlatformShell },
+    { path: '/overview', name: 'overview', component: PlatformShell, meta: { roles: ['admin', 'dispatcher', 'driver', 'viewer'] } },
+    { path: '/dispatch', name: 'dispatch', component: PlatformShell, meta: { roles: ['admin', 'dispatcher'] } },
+    { path: '/events', name: 'events', component: PlatformShell, meta: { roles: ['admin', 'dispatcher'] } },
+    { path: '/execution', name: 'execution', component: PlatformShell, meta: { roles: ['admin', 'dispatcher', 'driver'] } },
+    { path: '/experiments', name: 'experiments', component: PlatformShell, meta: { roles: ['admin', 'dispatcher'] } },
+    { path: '/history', name: 'history', component: PlatformShell, meta: { roles: ['admin', 'dispatcher', 'driver', 'viewer'] } },
+    {
+      path: '/order-requests',
+      name: 'orderRequests',
+      component: PlatformShell,
+      meta: { roles: ['admin'] },
+    },
+    {
+      path: '/my-orders',
+      name: 'myOrders',
+      component: UserOrderRoute,
+      meta: { roles: ['user'] },
+    },
     {
       path: '/readiness',
       name: 'readiness',
@@ -46,9 +63,10 @@ export const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  if (to.path === '/') return homeForRole(getSessionRole())
   if (to.meta.public) {
     return hasSession() && (to.name === 'login' || to.name === 'register')
-      ? { name: 'overview' }
+      ? homeForRole(getSessionRole())
       : true
   }
   if (!hasSession()) {
@@ -56,7 +74,7 @@ router.beforeEach((to) => {
   }
   const roles = to.meta.roles as string[] | undefined
   if (roles && !roles.includes(getSessionRole())) {
-    return { name: 'overview' }
+    return homeForRole(getSessionRole())
   }
   if (to.name === 'settings' && !to.params.section) {
     return { name: 'settings', params: { section: 'ai' } }

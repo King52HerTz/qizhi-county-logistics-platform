@@ -332,14 +332,18 @@ def test_public_registration_creates_least_privilege_account(client: TestClient)
     assert response.status_code == 201
     assert response.json()["username"] == username
     assert response.json()["display_name"] == "新注册用户"
-    assert response.json()["role"] == "driver"
+    assert response.json()["role"] == "user"
 
     profile = client.get(
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {response.json()['access_token']}"},
     )
     assert profile.status_code == 200
-    assert profile.json()["role"] == "driver"
+    assert profile.json()["role"] == "user"
+    user_headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    assert client.get("/api/v1/order-requests/options", headers=user_headers).status_code == 200
+    assert client.get("/api/v1/driver/assignments", headers=user_headers).status_code == 403
+    assert client.post("/api/v1/optimize", headers=user_headers, json={"time_limit_seconds": 1}).status_code == 403
 
 
 def test_public_registration_rejects_duplicate_weak_and_privileged_payloads(
@@ -1415,3 +1419,65 @@ def test_order_import_quality_rules_and_master_data_publish(client: TestClient) 
         if stale_order:
             session.delete(stale_order)
         session.commit()
+
+
+def test_user_order_request_review_converts_and_isolated(client: TestClient) -> None:
+    username = f"customer_{uuid4().hex[:10]}"
+    registered = client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": username,
+            "display_name": "订单申请客户",
+            "password": "StrongPass2026!",
+            "agreement_accepted": True,
+        },
+    )
+    assert registered.status_code == 201
+    user_headers = {"Authorization": f"Bearer {registered.json()['access_token']}"}
+    options = client.get("/api/v1/order-requests/options", headers=user_headers)
+    assert options.status_code == 200
+    node_id = options.json()["items"][0]["id"]
+    created = client.post(
+        "/api/v1/order-requests",
+        headers=user_headers,
+        json={
+            "node_id": node_id,
+            "cargo_name": "鲜黄花菜",
+            "customer_name": "验收收货人",
+            "customer_phone": "13800000000",
+            "delivery_address": "祁东县验收地址",
+            "weight_kg": 120,
+            "window_start": 480,
+            "window_end": 720,
+            "service_minutes": 8,
+            "cold_chain": True,
+            "priority": "normal",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["status"] == "pending_review"
+    assert client.get("/api/v1/order-requests", headers=user_headers).status_code == 403
+
+    admin = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "QizhiDemo2026!"},
+    )
+    admin_headers = {"Authorization": f"Bearer {admin.json()['access_token']}"}
+    reviewed = client.post(
+        f"/api/v1/order-requests/{created.json()['id']}/review",
+        headers=admin_headers,
+        json={"action": "approve"},
+    )
+    assert reviewed.status_code == 200
+    reviewed_payload = reviewed.json()
+    assert reviewed_payload["status"] == "converted"
+    assert reviewed_payload["operational_order_id"].startswith("ORD-")
+    assert reviewed_payload["operational_status"] == "pending"
+    scenario = client.get("/api/v1/scenario", headers=admin_headers)
+    assert scenario.status_code == 200
+    assert reviewed_payload["operational_order_id"] in {
+        item["id"] for item in scenario.json()["orders"]
+    }
+    mine = client.get("/api/v1/order-requests/mine", headers=user_headers)
+    assert mine.status_code == 200
+    assert mine.json()["items"][0]["status"] == "converted"

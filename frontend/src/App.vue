@@ -30,6 +30,7 @@ const AlgorithmLab = defineAsyncComponent(() => import('./components/AlgorithmLa
 const DecisionCockpit = defineAsyncComponent(() => import('./components/DecisionCockpit.vue'))
 const ExecutionCenter = defineAsyncComponent(() => import('./components/ExecutionCenter.vue'))
 const SystemSettings = defineAsyncComponent(() => import('./components/SystemSettings.vue'))
+const OrderRequestCenter = defineAsyncComponent(() => import('./components/OrderRequestCenter.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -42,7 +43,7 @@ if (demoResetRequested) {
 let snapshotTimer: number | undefined
 let weatherTimer: number | undefined
 let snapshotSyncing = false
-type PlatformView = 'overview' | 'dispatch' | 'events' | 'execution' | 'experiments' | 'history' | 'masterData' | 'scenarios' | 'readiness' | 'settings'
+type PlatformView = 'overview' | 'dispatch' | 'events' | 'execution' | 'experiments' | 'history' | 'masterData' | 'scenarios' | 'readiness' | 'settings' | 'orderRequests'
 type GuidedStep = {
   eyebrow: string
   title: string
@@ -230,6 +231,7 @@ const pageTitle = computed(() => ({
   scenarios: '县域业务场景管理',
   readiness: '运营评估中心',
   settings: '系统设置与服务配置',
+  orderRequests: '用户订单申请中心',
 }[activeView.value]))
 const crumbTitle = computed(() => ({
   overview: '运营总览',
@@ -242,6 +244,7 @@ const crumbTitle = computed(() => ({
   scenarios: '场景与数据导入',
   readiness: '运营能力评估',
   settings: '系统设置',
+  orderRequests: '订单申请',
 }[activeView.value]))
 const pageDescription = computed(() =>
   activeView.value === 'overview'
@@ -261,6 +264,7 @@ function go(view: PlatformView) {
     scenarios: '/scenarios',
     readiness: '/readiness',
     settings: '/settings/ai',
+    orderRequests: '/order-requests',
   }
   return router.push(paths[view])
 }
@@ -690,7 +694,7 @@ onMounted(async () => {
   } else if (authenticated.value) {
     void refreshWeather()
     await initializePlatform()
-    if (localStorage.getItem(GUIDE_COMPLETION_KEY) !== 'completed') {
+    if ((sessionRole.value === 'admin' || sessionRole.value === 'dispatcher') && localStorage.getItem(GUIDE_COMPLETION_KEY) !== 'completed') {
       await startOperationGuide()
     }
   }
@@ -728,18 +732,19 @@ watch(() => route.name, () => {
       </div>
       <nav>
         <button class="nav-item" data-guide="overview-nav" :class="{ active: activeView === 'overview' }" @click="go('overview')"><LayoutDashboard :size="18" /><span>运营总览</span></button>
-        <button class="nav-item" :class="{ active: activeView === 'dispatch' }" @click="go('dispatch')"><MapPinned :size="18" /><span>智能调度</span></button>
-        <button class="nav-item" :class="{ active: activeView === 'events' }" @click="go('events')"><Activity :size="18" /><span>动态事件</span><i v-if="activeEventCount">{{ activeEventCount }}</i></button>
-        <button class="nav-item" data-guide="execution-nav" :class="{ active: activeView === 'execution' }" @click="go('execution')"><Truck :size="18" /><span>执行中心</span></button>
-        <button class="nav-item" :class="{ active: activeView === 'scenarios' }" @click="showScenarios"><Warehouse :size="18" /><span>场景管理</span></button>
-        <button class="nav-item" :class="{ active: activeView === 'experiments' }" @click="go('experiments')"><FlaskConical :size="18" /><span>算法评估</span></button>
-        <button class="nav-item" :class="{ active: activeView === 'masterData' }" @click="go('masterData')"><Boxes :size="18" /><span>基础数据</span></button>
+        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'dispatch' }" @click="go('dispatch')"><MapPinned :size="18" /><span>智能调度</span></button>
+        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'events' }" @click="go('events')"><Activity :size="18" /><span>动态事件</span><i v-if="activeEventCount">{{ activeEventCount }}</i></button>
+        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher' || sessionRole === 'driver'" class="nav-item" data-guide="execution-nav" :class="{ active: activeView === 'execution' }" @click="go('execution')"><Truck :size="18" /><span>执行中心</span></button>
+        <button v-if="sessionRole === 'admin'" class="nav-item" :class="{ active: activeView === 'orderRequests' }" @click="go('orderRequests')"><FileSpreadsheet :size="18" /><span>订单申请</span></button>
+        <button v-if="sessionRole === 'admin'" class="nav-item" :class="{ active: activeView === 'scenarios' }" @click="showScenarios"><Warehouse :size="18" /><span>场景管理</span></button>
+        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'experiments' }" @click="go('experiments')"><FlaskConical :size="18" /><span>算法评估</span></button>
+        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'masterData' }" @click="go('masterData')"><Boxes :size="18" /><span>基础数据</span></button>
         <button class="nav-item" :class="{ active: activeView === 'history' }" @click="showHistory"><Database :size="18" /><span>方案历史</span></button>
         <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'readiness' }" @click="go('readiness')"><ChartNoAxesCombined :size="18" /><span>运营评估</span></button>
       </nav>
       <div class="side-bottom">
         <button v-if="sessionRole === 'admin'" class="nav-item" :class="{ active: activeView === 'settings' }" @click="showSettings"><Settings2 :size="18" /><span>系统设置</span></button>
-        <div class="operator"><div>{{ sessionUser.slice(0, 1) }}</div><p><strong>{{ sessionUser || '平台用户' }}</strong><span>{{ sessionRole === 'admin' ? '系统管理员' : '运营用户' }}</span></p></div>
+        <div class="operator"><div>{{ sessionUser.slice(0, 1) }}</div><p><strong>{{ sessionUser || '平台用户' }}</strong><span>{{ sessionRole === 'admin' ? '系统管理员' : sessionRole === 'driver' ? '配送驾驶员' : '运营调度员' }}</span></p></div>
       </div>
     </aside>
 
@@ -919,6 +924,10 @@ watch(() => route.name, () => {
 
         <template v-else-if="activeView === 'masterData'">
           <MasterDataCenter />
+        </template>
+
+        <template v-else-if="activeView === 'orderRequests'">
+          <OrderRequestCenter mode="admin" />
         </template>
 
         <template v-else-if="activeView === 'history'">

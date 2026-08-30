@@ -5,7 +5,7 @@ import RegisterPage from './RegisterPage.vue'
 const router = useRouter()
 
 async function afterRegistration() {
-  await router.replace('/overview')
+  await router.replace('/my-orders')
 }
 </script>
 

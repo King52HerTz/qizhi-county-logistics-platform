@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import jwt
@@ -53,6 +54,7 @@ from app.models import (
     NodeRecord,
     OptimizationRunRecord,
     OrderRecord,
+    OrderRequestRecord,
     ScenarioTransitionRecord,
     ScenarioVersionRecord,
     UserRecord,
@@ -145,6 +147,12 @@ from app.schemas import (
     MasterOrderInput,
     MasterOrderList,
     MasterOrderView,
+    OrderRequestCreate,
+    OrderRequestList,
+    OrderRequestNodeOption,
+    OrderRequestNodeOptionList,
+    OrderRequestReviewRequest,
+    OrderRequestView,
     MasterVehicleCreate,
     MasterVehicleInput,
     MasterVehicleList,
@@ -246,6 +254,25 @@ def driver_user(user: UserRecord = Depends(current_user)) -> UserRecord:
     return user
 
 
+def operations_reader(user: UserRecord = Depends(current_user)) -> UserRecord:
+    """Read-only operational data is limited to internal operations roles."""
+    if user.role not in {"admin", "dispatcher", "driver", "viewer"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前账号无权查看运营数据")
+    return user
+
+
+def customer_user(user: UserRecord = Depends(current_user)) -> UserRecord:
+    if user.role != "user":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅注册用户可提交订单申请")
+    return user
+
+
+def order_request_reader(user: UserRecord = Depends(current_user)) -> UserRecord:
+    if user.role not in {"admin", "user"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前账号无权查看用户订单")
+    return user
+
+
 def _active_ai_config(session: Session) -> AIProviderConfigRecord | None:
     return session.scalar(
         select(AIProviderConfigRecord)
@@ -268,19 +295,33 @@ def _active_map_config(session: Session) -> MapProviderConfigRecord | None:
     )
 
 
+def _masked_encrypted_secret(value: str) -> tuple[bool, str]:
+    """Render a secret safely even when an old encryption key is unavailable."""
+    try:
+        secret = decrypt_secret(value)
+    except ValueError:
+        # Keep the settings page usable after an operator rotates the
+        # encryption key.  The ciphertext is still treated as configured, but
+        # it is never exposed or used until the connection is re-saved.
+        return bool(value), "••••••••" if value else ""
+    return bool(secret), mask_secret(secret)
+
+
 def _map_config_view(record: MapProviderConfigRecord) -> MapConfigView:
-    web_key = decrypt_secret(record.encrypted_web_key)
-    security_code = decrypt_secret(record.encrypted_security_code)
+    has_web_key, web_key_masked = _masked_encrypted_secret(record.encrypted_web_key)
+    has_security_code, security_code_masked = _masked_encrypted_secret(
+        record.encrypted_security_code
+    )
     return MapConfigView(
         id=record.id,
         name=record.name,
         provider=record.provider,
         map_style=record.map_style,
         enabled=record.enabled,
-        has_web_key=bool(web_key),
-        web_key_masked=mask_secret(web_key),
-        has_security_code=bool(security_code),
-        security_code_masked=mask_secret(security_code),
+        has_web_key=has_web_key,
+        web_key_masked=web_key_masked,
+        has_security_code=has_security_code,
+        security_code_masked=security_code_masked,
         last_test_status=record.last_test_status,
         last_test_message=record.last_test_message,
         last_tested_at=record.last_tested_at,
@@ -292,7 +333,7 @@ def _map_config_view(record: MapProviderConfigRecord) -> MapConfigView:
 
 
 def _ai_config_view(record: AIProviderConfigRecord) -> AIConfigView:
-    secret = decrypt_secret(record.encrypted_api_key)
+    has_api_key, api_key_masked = _masked_encrypted_secret(record.encrypted_api_key)
     return AIConfigView(
         id=record.id,
         name=record.name,
@@ -302,8 +343,8 @@ def _ai_config_view(record: AIProviderConfigRecord) -> AIConfigView:
         model_name=record.model_name,
         enabled=record.enabled,
         temperature=float(record.temperature),
-        has_api_key=bool(secret),
-        api_key_masked=mask_secret(secret),
+        has_api_key=has_api_key,
+        api_key_masked=api_key_masked,
         last_test_status=record.last_test_status,
         last_test_message=record.last_test_message,
         last_tested_at=record.last_tested_at,
@@ -422,6 +463,36 @@ def _master_order_view(record: OrderRecord) -> MasterOrderView:
         cold_chain=record.cold_chain,
         priority=record.priority,
         status=record.status,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _order_request_view(record: OrderRequestRecord) -> OrderRequestView:
+    operational = record.operational_order
+    return OrderRequestView(
+        id=record.id,
+        request_code=record.request_code,
+        requester_username=record.requester.username,
+        requester_name=record.requester.display_name or record.requester.username,
+        node_id=record.node_id,
+        node_name=record.node.name,
+        cargo_name=record.cargo_name,
+        customer_name=record.customer_name,
+        customer_phone=record.customer_phone,
+        delivery_address=record.delivery_address,
+        weight_kg=record.weight_kg,
+        window_start=record.window_start,
+        window_end=record.window_end,
+        service_minutes=record.service_minutes,
+        cold_chain=record.cold_chain,
+        priority=record.priority,
+        status=record.status,
+        review_note=record.review_note,
+        reviewer_username=record.reviewer.username if record.reviewer else None,
+        reviewed_at=record.reviewed_at,
+        operational_order_id=record.operational_order_id,
+        operational_status=operational.status if operational else None,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -654,7 +725,7 @@ def health_ready(session: Session = Depends(get_db)) -> dict:
 
 @app.get("/api/v1/map/runtime", response_model=MapRuntimeConfig)
 def map_runtime(
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> MapRuntimeConfig:
     record = _active_map_config(session)
@@ -1063,7 +1134,7 @@ def register(
         username=username,
         display_name=display_name,
         password_hash=hash_password(payload.password),
-        role="driver",
+        role="user",
         is_active=True,
         failed_login_count=0,
         last_login_at=now,
@@ -1080,7 +1151,7 @@ def register(
         request=request,
         resource_type="user",
         resource_id=str(record.id),
-        detail={"assigned_role": "driver", "agreement_accepted": True},
+        detail={"assigned_role": "user", "agreement_accepted": True},
     )
     session.commit()
     return TokenResponse(
@@ -1292,6 +1363,267 @@ def reset_user_password(
     session.commit()
 
 
+@app.get("/api/v1/order-requests/options", response_model=OrderRequestNodeOptionList)
+def order_request_options(
+    _: UserRecord = Depends(customer_user),
+    session: Session = Depends(get_db),
+) -> OrderRequestNodeOptionList:
+    records = session.scalars(
+        select(NodeRecord)
+        .where(NodeRecord.is_active.is_(True), NodeRecord.kind != "depot")
+        .order_by(NodeRecord.kind, NodeRecord.name, NodeRecord.id)
+    ).all()
+    return OrderRequestNodeOptionList(
+        items=[
+            OrderRequestNodeOption(
+                id=record.id,
+                name=record.name,
+                address=record.address,
+                kind=record.kind,
+            )
+            for record in records
+        ]
+    )
+
+
+@app.post(
+    "/api/v1/order-requests",
+    response_model=OrderRequestView,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_order_request(
+    payload: OrderRequestCreate,
+    request: Request,
+    actor: UserRecord = Depends(customer_user),
+    session: Session = Depends(get_db),
+) -> OrderRequestView:
+    _require_active_node(session, payload.node_id)
+    request_code = f"UR-{datetime.now(timezone.utc):%Y%m%d}-{uuid4().hex[:8].upper()}"
+    record = OrderRequestRecord(
+        request_code=request_code,
+        requester_id=actor.id,
+        **payload.model_dump(),
+    )
+    session.add(record)
+    session.flush()
+    _audit(
+        session,
+        category="order_request",
+        action="submit",
+        actor=actor,
+        request=request,
+        resource_type="order_request",
+        resource_id=str(record.id),
+        detail={"request_code": record.request_code, "node_id": record.node_id},
+    )
+    session.commit()
+    session.refresh(record)
+    return _order_request_view(record)
+
+
+@app.get("/api/v1/order-requests/mine", response_model=OrderRequestList)
+def list_my_order_requests(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    actor: UserRecord = Depends(customer_user),
+    session: Session = Depends(get_db),
+) -> OrderRequestList:
+    statement = select(OrderRequestRecord).where(
+        OrderRequestRecord.requester_id == actor.id
+    )
+    total = session.scalar(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    ) or 0
+    records = session.scalars(
+        statement.order_by(
+            OrderRequestRecord.created_at.desc(), OrderRequestRecord.id.desc()
+        )
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return OrderRequestList(
+        items=[_order_request_view(record) for record in records], total=total
+    )
+
+
+@app.get("/api/v1/order-requests", response_model=OrderRequestList)
+def list_order_requests(
+    request_status: str | None = Query(default=None, alias="status", max_length=20),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    _: UserRecord = Depends(admin_user),
+    session: Session = Depends(get_db),
+) -> OrderRequestList:
+    statement = select(OrderRequestRecord)
+    if request_status:
+        statement = statement.where(OrderRequestRecord.status == request_status)
+    total = session.scalar(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    ) or 0
+    records = session.scalars(
+        statement.order_by(
+            OrderRequestRecord.created_at.desc(), OrderRequestRecord.id.desc()
+        )
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return OrderRequestList(
+        items=[_order_request_view(record) for record in records], total=total
+    )
+
+
+@app.get("/api/v1/order-requests/{request_id}", response_model=OrderRequestView)
+def get_order_request(
+    request_id: int,
+    actor: UserRecord = Depends(order_request_reader),
+    session: Session = Depends(get_db),
+) -> OrderRequestView:
+    record = session.get(OrderRequestRecord, request_id)
+    if record is None or (actor.role == "user" and record.requester_id != actor.id):
+        raise HTTPException(status_code=404, detail="订单申请不存在")
+    return _order_request_view(record)
+
+
+def _approve_order_request(
+    session: Session,
+    record: OrderRequestRecord,
+    actor: UserRecord,
+    note: str | None = None,
+) -> str:
+    if record.operational_order_id:
+        raise HTTPException(status_code=409, detail="该订单申请已经纳入运营订单")
+    _require_active_node(session, record.node_id)
+    operational_order_id = f"ORD-{record.request_code.removeprefix('UR-')}"
+    if session.get(OrderRecord, operational_order_id):
+        raise HTTPException(status_code=409, detail="运营订单编号冲突，请联系管理员")
+    session.add(
+        OrderRecord(
+            id=operational_order_id,
+            node_id=record.node_id,
+            weight_kg=record.weight_kg,
+            window_start=record.window_start,
+            window_end=record.window_end,
+            service_minutes=record.service_minutes,
+            cold_chain=record.cold_chain,
+            priority=record.priority,
+            status="pending",
+            cargo_name=record.cargo_name,
+            customer_name=record.customer_name,
+            customer_phone=record.customer_phone,
+            delivery_address=record.delivery_address,
+        )
+    )
+    record.operational_order_id = operational_order_id
+    record.status = "converted"
+    record.reviewed_by = actor.id
+    record.reviewed_at = datetime.now(timezone.utc)
+    record.review_note = note or "审核通过，已纳入运营调度"
+    session.flush()
+    try:
+        scenario, warnings = build_scenario_from_master(
+            session, name="祁东县用户订单运营场景"
+        )
+    except OrderImportError:
+        session.rollback()
+        raise
+    version = create_scenario_version(
+        session,
+        scenario_code="master-data",
+        county_name="祁东县",
+        scenario=scenario,
+        source_filename=f"用户订单申请 {record.request_code}",
+        warnings=warnings,
+        created_by=actor.id,
+    )
+    activate_scenario_version(
+        session,
+        version,
+        actor_id=actor.id,
+        note=f"订单申请 {record.request_code} 审核通过并自动纳入调度",
+    )
+    return version.version_key
+
+
+@app.post(
+    "/api/v1/order-requests/{request_id}/review",
+    response_model=OrderRequestView,
+)
+def review_order_request(
+    request_id: int,
+    payload: OrderRequestReviewRequest,
+    request: Request,
+    actor: UserRecord = Depends(admin_user),
+    session: Session = Depends(get_db),
+) -> OrderRequestView:
+    record = session.get(OrderRequestRecord, request_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="订单申请不存在")
+    if record.status not in {"pending_review", "needs_info"}:
+        raise HTTPException(status_code=409, detail="当前申请状态不允许重复审核")
+    note = (payload.note or "").strip()
+    scenario_key: str | None = None
+    try:
+        if payload.action == "approve":
+            scenario_key = _approve_order_request(session, record, actor, note)
+        else:
+            record.status = "needs_info" if payload.action == "needs_info" else "rejected"
+            record.reviewed_by = actor.id
+            record.reviewed_at = datetime.now(timezone.utc)
+            record.review_note = note or (
+                "请补充配送信息后重新提交" if payload.action == "needs_info" else "申请未通过审核"
+            )
+    except OrderImportError as exc:
+        raise HTTPException(status_code=409, detail=f"申请暂不能纳入调度：{exc}") from exc
+    _audit(
+        session,
+        category="order_request",
+        action="review",
+        actor=actor,
+        request=request,
+        resource_type="order_request",
+        resource_id=str(record.id),
+        detail={
+            "request_code": record.request_code,
+            "action": payload.action,
+            "status": record.status,
+            "operational_order_id": record.operational_order_id,
+            "scenario_key": scenario_key,
+        },
+    )
+    session.commit()
+    session.refresh(record)
+    return _order_request_view(record)
+
+
+@app.post("/api/v1/order-requests/{request_id}/cancel", response_model=OrderRequestView)
+def cancel_order_request(
+    request_id: int,
+    request: Request,
+    actor: UserRecord = Depends(customer_user),
+    session: Session = Depends(get_db),
+) -> OrderRequestView:
+    record = session.get(OrderRequestRecord, request_id)
+    if record is None or record.requester_id != actor.id:
+        raise HTTPException(status_code=404, detail="订单申请不存在")
+    if record.status not in {"pending_review", "needs_info"}:
+        raise HTTPException(status_code=409, detail="当前申请状态不能撤回")
+    record.status = "cancelled"
+    record.review_note = "用户主动撤回申请"
+    _audit(
+        session,
+        category="order_request",
+        action="cancel",
+        actor=actor,
+        request=request,
+        resource_type="order_request",
+        resource_id=str(record.id),
+        detail={"request_code": record.request_code},
+    )
+    session.commit()
+    session.refresh(record)
+    return _order_request_view(record)
+
+
 def _audit_query(
     *,
     days: int,
@@ -1433,7 +1765,7 @@ def master_data_summary(
 
 @app.get("/api/v1/reference/qidong-summary", response_model=QidongReferenceSummary)
 def qidong_reference_summary(
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> QidongReferenceSummary:
     """Return the curated research baseline without exposing raw source files."""
@@ -1795,6 +2127,12 @@ def delete_master_order(
         raise HTTPException(status_code=404, detail="订单不存在")
     if record.status not in {"pending", "cancelled"}:
         raise HTTPException(status_code=409, detail="只有待调度或已取消订单可以删除")
+    if session.scalar(
+        select(OrderRequestRecord.id).where(
+            OrderRequestRecord.operational_order_id == record.id
+        )
+    ):
+        raise HTTPException(status_code=409, detail="该订单来自用户申请，请保留申请链路")
     session.delete(record)
     _audit(
         session,
@@ -2458,6 +2796,12 @@ def upsert_ai_config(
     session: Session = Depends(get_db),
 ) -> AIConfigView:
     record = _latest_ai_config(session)
+    if request.enabled:
+        enabled_query = session.query(AIProviderConfigRecord)
+        if record is not None:
+            enabled_query = enabled_query.filter(AIProviderConfigRecord.id != record.id)
+        enabled_query.update({"enabled": False}, synchronize_session=False)
+
     if record is None:
         if not request.api_key or not request.api_key.strip():
             raise HTTPException(status_code=422, detail="首次配置必须填写 API Key")
@@ -2489,11 +2833,6 @@ def upsert_ai_config(
             record.encrypted_api_key = encrypt_secret(request.api_key.strip())
 
     session.flush()
-    if request.enabled:
-        for other in session.scalars(
-            select(AIProviderConfigRecord).where(AIProviderConfigRecord.id != record.id)
-        ):
-            other.enabled = False
     session.commit()
     session.refresh(record)
     return _ai_config_view(record)
@@ -2525,7 +2864,7 @@ def test_saved_ai_config(
 @app.post("/api/v1/ai/explain/{run_id}", response_model=AIExplanationResponse)
 def explain_saved_run(
     run_id: str,
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> AIExplanationResponse:
     record = session.get(OptimizationRunRecord, run_id)
@@ -2809,7 +3148,7 @@ def activate_scenario(
 
 @app.get("/api/v1/scenario")
 def scenario(
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ):
     return load_scenario(session)
@@ -2820,7 +3159,7 @@ def scenario(
     response_model=ScenarioSpatialStatus,
 )
 def scenario_spatial_status(
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> ScenarioSpatialStatus:
     current = load_scenario(session)
@@ -2829,7 +3168,7 @@ def scenario_spatial_status(
 
 @app.get("/api/v1/dashboard")
 def dashboard(
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> dict:
     current = load_scenario(session)
@@ -2847,7 +3186,7 @@ def dashboard(
 
 
 @app.get("/api/v1/routing/status", response_model=RoutingStatus)
-def routing_status(_: UserRecord = Depends(current_user)) -> RoutingStatus:
+def routing_status(_: UserRecord = Depends(operations_reader)) -> RoutingStatus:
     entries, capacity = cache_status()
     return RoutingStatus(
         requested_provider=settings.routing_provider,
@@ -2858,7 +3197,7 @@ def routing_status(_: UserRecord = Depends(current_user)) -> RoutingStatus:
 
 
 @app.get("/api/v1/weather/current", response_model=CurrentWeather)
-async def current_weather(_: UserRecord = Depends(current_user)) -> CurrentWeather:
+async def current_weather(_: UserRecord = Depends(operations_reader)) -> CurrentWeather:
     try:
         return await get_current_weather()
     except WeatherServiceError as exc:
@@ -2871,7 +3210,7 @@ async def current_weather(_: UserRecord = Depends(current_user)) -> CurrentWeath
 @app.get("/api/v1/analytics/forecast", response_model=DemandForecast)
 def demand_forecast(
     days: int = Query(default=7, ge=3, le=30),
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> DemandForecast:
     order_date = func.date(OrderRecord.created_at)
@@ -2899,7 +3238,7 @@ def demand_forecast(
 @app.post("/api/v1/optimize", response_model=OptimizeResponse)
 def optimize(
     request: OptimizeRequest,
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(dispatcher_user),
     session: Session = Depends(get_db),
 ) -> OptimizeResponse:
     try:
@@ -2918,7 +3257,7 @@ def optimize(
 @app.post("/api/v1/events/reoptimize", response_model=OptimizeResponse)
 def reoptimize(
     request: ReoptimizeRequest,
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(dispatcher_user),
     session: Session = Depends(get_db),
 ) -> OptimizeResponse:
     if request.profile == "standard-v1":
@@ -3057,7 +3396,7 @@ def reoptimize(
 def run_history(
     limit: int = Query(default=20, ge=1, le=100),
     before: datetime | None = Query(default=None),
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> RunListResponse:
     records = list_runs(session, limit=limit, before=before)
@@ -3083,7 +3422,7 @@ def run_history(
 @app.get("/api/v1/runs/latest", response_model=OptimizeResponse | None)
 def latest_run(
     scenario_id: str | None = Query(default=None, max_length=64),
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> dict | None:
     active_scenario_id = scenario_id or load_scenario(session).id
@@ -3105,7 +3444,7 @@ def latest_run(
 @app.get("/api/v1/runs/{run_id}", response_model=OptimizeResponse)
 def run_detail(
     run_id: str,
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> dict:
     record = session.get(OptimizationRunRecord, run_id)
@@ -3349,7 +3688,7 @@ def complete_driver_assignment(
 @app.get("/api/v1/dispatch/plans/{plan_id}/report", response_class=HTMLResponse)
 def dispatch_plan_report(
     plan_id: int,
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> HTMLResponse:
     try:
@@ -3401,7 +3740,7 @@ th{{background:#0d5737;color:white}}footer{{margin-top:28px;color:#78867e;font-s
 @app.post("/api/v1/jobs/optimize", response_model=AsyncJobResponse, status_code=202)
 def enqueue_optimization(
     request: OptimizeRequest,
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(dispatcher_user),
 ) -> AsyncJobResponse:
     try:
         task = optimize_scenario_task.delay(request.time_limit_seconds, request.scenario_id)
@@ -3416,7 +3755,7 @@ def enqueue_optimization(
 @app.get("/api/v1/jobs/{task_id}", response_model=AsyncJobStatus)
 def job_status(
     task_id: str,
-    _: UserRecord = Depends(current_user),
+    _: UserRecord = Depends(dispatcher_user),
 ) -> AsyncJobStatus:
     task = AsyncResult(task_id, app=celery_app)
     result = task.result if task.successful() and isinstance(task.result, dict) else None

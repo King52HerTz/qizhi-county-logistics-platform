@@ -54,7 +54,7 @@ async function submit() {
           <div class="login-icon"><LockKeyhole :size="23" /></div>
           <p>欢迎回来</p>
           <h2>登录运营管理平台</h2>
-          <span>使用企业账号登录，或创建一个新的运营账号</span>
+          <span>使用企业账号登录；没有账号时可创建用户账号提交配送需求</span>
         </div>
         <form @submit.prevent="submit">
           <label><span>账号</span><input v-model.trim="username" autocomplete="username" placeholder="请输入账号" required /></label>
@@ -78,7 +78,7 @@ async function submit() {
         </form>
         <div class="register-entry">
           <span>还没有账号？</span>
-          <RouterLink to="/register">创建运营账号</RouterLink>
+          <RouterLink to="/register">创建用户账号</RouterLink>
         </div>
         <div class="security-note"><CheckCircle2 :size="16" /><span>连续 5 次登录失败将锁定账号 15 分钟</span></div>
         <footer>© 2026 祁智运 · 县域物流智能决策平台</footer>

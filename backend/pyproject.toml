@@ -5,7 +5,7 @@ description = "Qidong county logistics AI dispatch API"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1",
-  "uvicorn[standard]>=0.34,<1",
+  "uvicorn>=0.34,<1",
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
   "httpx>=0.28,<1",
@@ -20,13 +20,15 @@ dependencies = [
   "openpyxl>=3.1,<4",
   "ortools>=9.12,<10",
   "pyvrp>=0.13,<0.15",
-  "xgboost-cpu>=2.1,<4; platform_system == 'Linux'",
-  "xgboost>=2.1,<4; platform_system != 'Linux'",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3,<9",
+]
+ml = [
+  "xgboost-cpu>=2.1,<4; platform_system == 'Linux'",
+  "xgboost>=2.1,<4; platform_system != 'Linux'",
 ]
 
 [tool.pytest.ini_options]

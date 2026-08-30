@@ -253,6 +253,52 @@ export interface RegisterInput {
   agreement_accepted: true
 }
 
+export type OrderRequestStatus =
+  | 'pending_review'
+  | 'needs_info'
+  | 'rejected'
+  | 'converted'
+  | 'cancelled'
+
+export interface OrderRequestNodeOption {
+  id: string
+  name: string
+  address?: string
+  kind: 'depot' | 'town' | 'village' | 'processor'
+}
+
+export interface OrderRequest {
+  id: number
+  request_code: string
+  requester_username: string
+  requester_name: string
+  node_id: string
+  node_name: string
+  cargo_name: string
+  customer_name: string
+  customer_phone?: string
+  delivery_address?: string
+  weight_kg: number
+  window_start: number
+  window_end: number
+  service_minutes: number
+  cold_chain: boolean
+  priority: 'normal' | 'urgent'
+  status: OrderRequestStatus
+  review_note?: string
+  reviewer_username?: string
+  reviewed_at?: string
+  operational_order_id?: string
+  operational_status?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface OrderRequestList {
+  items: OrderRequest[]
+  total: number
+}
+
 export interface AIConfigInput {
   name: string
   description?: string
@@ -295,7 +341,7 @@ export interface CurrentUser {
   last_login_at?: string
 }
 
-export type UserRole = 'admin' | 'dispatcher' | 'driver' | 'viewer'
+export type UserRole = 'admin' | 'dispatcher' | 'driver' | 'viewer' | 'user'
 
 export interface ManagedUser {
   id: number
