@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.data.qidong_reference import reference_order_profile
 from app.data.scenario import get_scenario
 from app.models import (
     EventRecord,
@@ -75,20 +76,34 @@ def seed_demo_data(session: Session) -> None:
                 )
             )
     for order in scenario.orders:
-        if session.get(OrderRecord, order.id) is None:
-            session.add(
-                OrderRecord(
-                    id=order.id,
-                    node_id=order.node_id,
-                    weight_kg=order.weight_kg,
-                    window_start=order.window_start,
-                    window_end=order.window_end,
-                    service_minutes=order.service_minutes,
-                    cold_chain=order.cold_chain,
-                    priority=order.priority,
-                    status="completed" if order.completed else "pending",
-                )
+        profile = reference_order_profile(order.id) or {}
+        record = session.get(OrderRecord, order.id)
+        if record is None:
+            record = OrderRecord(
+                id=order.id,
+                node_id=order.node_id,
+                weight_kg=order.weight_kg,
+                window_start=order.window_start,
+                window_end=order.window_end,
+                service_minutes=order.service_minutes,
+                cold_chain=order.cold_chain,
+                priority=order.priority,
+                status="completed" if order.completed else "pending",
+                cargo_name=profile.get("cargo_name", "农产品"),
+                customer_name=profile.get("customer_name", "未登记客户"),
+                customer_phone=profile.get("customer_phone"),
+                delivery_address=profile.get("delivery_address"),
             )
+            session.add(record)
+        elif profile:
+            if record.cargo_name == "农产品":
+                record.cargo_name = profile["cargo_name"]
+            if record.customer_name == "未登记客户":
+                record.customer_name = profile["customer_name"]
+            if not record.customer_phone:
+                record.customer_phone = profile["customer_phone"]
+            if not record.delivery_address:
+                record.delivery_address = profile["delivery_address"]
     settings = get_settings()
     if session.scalar(select(UserRecord).where(UserRecord.username == settings.admin_username)) is None:
         session.add(

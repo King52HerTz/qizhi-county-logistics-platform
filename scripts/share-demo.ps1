@@ -288,7 +288,8 @@ try {
     Write-Host ""
     Write-Host "请保持 Docker Desktop、此窗口和电脑网络连接。" -ForegroundColor Cyan
     Write-Host "同学看完后按 Enter 结束分享；也可双击【停止分享链接.bat】。" -ForegroundColor Cyan
-    Write-Host "如果高德地图未显示，请将此公网域名加入高德 Web JS Key 的域名白名单后刷新。" -ForegroundColor DarkYellow
+    Write-Host "临时分享链接会自动使用免白名单的县域运营地图，无需修改高德配置。" -ForegroundColor DarkYellow
+    Write-Host "如需在公网展示高德道路底图，请改用固定域名，并只在高德控制台配置一次该域名。" -ForegroundColor DarkYellow
     Write-Host ""
     [void](Read-Host "按 Enter 结束本次分享")
 }

@@ -167,7 +167,7 @@ onMounted(load)
 
     <aside class="security-note">
       <ShieldCheck :size="21" />
-      <div><strong>安全代理模式</strong><p>安全密钥在服务端加密保存并通过同源代理使用，不返回给浏览器。建议同时在高德控制台配置域名白名单。</p></div>
+      <div><strong>安全代理与公网分享</strong><p>安全密钥在服务端加密保存并通过同源代理使用，不返回给浏览器。本机或固定域名继续使用高德道路地图；Cloudflare 临时分享链接会自动切换为内置县域运营地图，不需要反复修改高德域名白名单。</p></div>
     </aside>
 
     <Teleport to="body">

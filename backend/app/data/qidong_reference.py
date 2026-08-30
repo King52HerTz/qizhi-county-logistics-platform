@@ -128,6 +128,36 @@ COLD_CHAIN_TOWNS = frozenset(
 )
 
 
+# Deterministic, non-personal demo customer profiles for the 16 standard
+# orders.  Names and contact numbers are fictional, while products and
+# delivery locations follow the county service-node context.
+REFERENCE_ORDER_PROFILES: dict[str, dict[str, str]] = {
+    "O-001": {"cargo_name": "鲜黄花菜", "customer_name": "石山堰黄花菜种植合作社", "customer_phone": "0734-6001001", "delivery_address": "祁东县砖塘镇石山堰村综合服务站"},
+    "O-002": {"cargo_name": "油茶籽", "customer_name": "先锋村农副产品服务部", "customer_phone": "0734-6001002", "delivery_address": "祁东县砖塘镇先锋村便民服务点"},
+    "O-003": {"cargo_name": "生鲜蔬菜", "customer_name": "市门村蔬菜产销合作社", "customer_phone": "0734-6001003", "delivery_address": "祁东县河洲镇市门村冷链收货区"},
+    "O-004": {"cargo_name": "优质稻米", "customer_name": "三河村粮食加工合作社", "customer_phone": "0734-6001004", "delivery_address": "祁东县河洲镇三河村粮食服务点"},
+    "O-005": {"cargo_name": "高山果蔬", "customer_name": "拔茅冲村果蔬合作社", "customer_phone": "0734-6001005", "delivery_address": "祁东县步云桥镇拔茅冲村集配点"},
+    "O-006": {"cargo_name": "黄花菜鲜品", "customer_name": "梅塘村黄花菜合作社", "customer_phone": "0734-6001006", "delivery_address": "祁东县石亭子镇梅塘村产地预冷点"},
+    "O-007": {"cargo_name": "油茶籽", "customer_name": "永隆村油茶产业合作社", "customer_phone": "0734-6001007", "delivery_address": "祁东县城连圩乡永隆村综合服务站"},
+    "O-008": {"cargo_name": "黄花菜干品", "customer_name": "双溪村黄花菜加工点", "customer_phone": "0734-6001008", "delivery_address": "祁东县黄土铺镇双溪村加工区"},
+    "O-009": {"cargo_name": "农资用品", "customer_name": "金城村农资配送服务点", "customer_phone": "0734-6001009", "delivery_address": "祁东县金桥镇金城村农资服务站"},
+    "O-010": {"cargo_name": "油茶制品", "customer_name": "兴龙村油茶产销合作社", "customer_phone": "0734-6001010", "delivery_address": "祁东县灵官镇兴龙村综合服务站"},
+    "O-011": {"cargo_name": "优质稻米", "customer_name": "定丰村优质稻合作社", "customer_phone": "0734-6001011", "delivery_address": "祁东县河洲镇定丰村粮食收储点"},
+    "O-012": {"cargo_name": "生鲜果蔬", "customer_name": "梅下村生鲜集配服务点", "customer_phone": "0734-6001012", "delivery_address": "祁东县步云桥镇梅下村冷链交付区"},
+    "O-013": {"cargo_name": "黄花菜鲜品", "customer_name": "罗口町村黄花菜合作社", "customer_phone": "0734-6001013", "delivery_address": "祁东县太和堂镇罗口町村产地仓"},
+    "O-014": {"cargo_name": "粮油产品", "customer_name": "禄桥村粮油综合服务站", "customer_phone": "0734-6001014", "delivery_address": "祁东县灵官镇禄桥村综合服务站"},
+    "O-015": {"cargo_name": "时令果蔬", "customer_name": "福缘村果蔬产销合作社", "customer_phone": "0734-6001015", "delivery_address": "祁东县过水坪镇福缘村冷链收货点"},
+    "O-016": {"cargo_name": "社区团购商品", "customer_name": "罗云村社区配送服务点", "customer_phone": "0734-6001016", "delivery_address": "祁东县白鹤街道罗云村综合服务站"},
+}
+
+
+def reference_order_profile(order_id: str) -> dict[str, str] | None:
+    """Return a copy so callers cannot mutate the reference baseline."""
+
+    profile = REFERENCE_ORDER_PROFILES.get(order_id)
+    return dict(profile) if profile else None
+
+
 AHP_WEIGHTS: tuple[dict[str, float | str], ...] = (
     {"code": "C1", "label": "坡度", "weight": 0.109},
     {"code": "C2", "label": "海拔", "weight": 0.055},

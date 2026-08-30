@@ -11,7 +11,11 @@ from sqlalchemy import select
 
 from app.ai_service import _plain_text
 from app.db import SessionLocal
-from app.data.qidong_reference import build_qidong_reference_summary, build_reference_demo_orders
+from app.data.qidong_reference import (
+    REFERENCE_ORDER_PROFILES,
+    build_qidong_reference_summary,
+    build_reference_demo_orders,
+)
 from app.main import app
 from app.optimization_orchestrator import orchestrate_optimization
 from app.models import (
@@ -129,6 +133,13 @@ def test_qidong_reference_summary_is_deterministic_and_flags_coordinates(
     assert payload["coordinate_quality"]["duplicate_nodes"] == 0
     assert payload["demo_load_ratio"] == pytest.approx(0.0015)
     assert payload["demo_order_count"] == len(get_scenario().orders)
+    assert len(REFERENCE_ORDER_PROFILES) == len(get_scenario().orders)
+    assert all(
+        profile["customer_name"] != "未登记客户"
+        and profile["customer_phone"]
+        and profile["delivery_address"].startswith("祁东县")
+        for profile in REFERENCE_ORDER_PROFILES.values()
+    )
     assert payload["demo_order_weight_kg"] == sum(
         order.weight_kg for order in get_scenario().orders
     )

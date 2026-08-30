@@ -151,6 +151,10 @@ let drawToken = 0;
 let routeOverlays: any[] = [];
 let activeRouteOverlays: any[] = [];
 
+function isEphemeralShareHost() {
+  return window.location.hostname.toLowerCase().endsWith(".trycloudflare.com");
+}
+
 function coordinatesForNode(node: Node): [number, number] {
   return [node.longitude, node.latitude];
 }
@@ -534,10 +538,15 @@ async function initialize() {
   } catch {
     /* permission/network fallback */
   }
+  const useShareSafeMap = isEphemeralShareHost();
+  if (useShareSafeMap && runtime.mode === "online") {
+    sourceMessage.value = "公网共享运营地图";
+  }
   if (
     runtime.mode === "online" &&
     runtime.provider === "amap" &&
-    runtime.web_key
+    runtime.web_key &&
+    !useShareSafeMap
   ) {
     try {
       await loadAmapScript(runtime);
