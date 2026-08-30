@@ -183,7 +183,7 @@ function Start-ShareTunnel {
     $stdoutLog = Join-Path $logDirectory "cloudflared-$stamp.out.log"
     $stderrLog = Join-Path $logDirectory "cloudflared-$stamp.err.log"
     $tunnelProcess = Start-Process -FilePath $cloudflaredPath `
-        -ArgumentList @("tunnel", "--url", $appUrl) `
+        -ArgumentList @("tunnel", "--protocol", "http2", "--url", $appUrl) `
         -RedirectStandardOutput $stdoutLog `
         -RedirectStandardError $stderrLog `
         -WindowStyle Hidden `
@@ -201,44 +201,41 @@ function Start-ShareTunnel {
         }
         $output = Read-TunnelOutput
         $match = [regex]::Match($output, "https://[a-z0-9-]+\.trycloudflare\.com")
-        if ($match.Success) {
+        $registered = $output -match "Registered tunnel connection"
+        if ($match.Success -and $registered) {
             return $match.Value
         }
         if ($attempt % 10 -eq 0) {
-            Write-Host "  正在连接公网分享服务（约 $attempt 秒）..."
+            Write-Host "  正在连接公网分享服务（约 $attempt 秒，等待连接注册）..."
         }
     }
-    throw "公网分享地址生成超时，请检查网络后重试。"
+    throw "公网分享连接注册超时。当前网络可能无法通过 HTTP/2 连接 Cloudflare，请检查网络或稍后重试。"
 }
 
 function Test-PublicUrl {
     param([string]$Url)
-    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
-    if ($curl) {
-        for ($attempt = 1; $attempt -le 3; $attempt++) {
-            $previousErrorActionPreference = $ErrorActionPreference
-            $ErrorActionPreference = "Continue"
-            $statusCode = & $curl.Path -L -sS --max-time 12 -o NUL -w "%{http_code}" $Url 2>$null
-            $curlExitCode = $LASTEXITCODE
-            $ErrorActionPreference = $previousErrorActionPreference
-            if ($curlExitCode -eq 0 -and [string]$statusCode -match "^[23]\d\d$") {
-                return $true
-            }
-            if ($attempt -lt 3) {
-                Start-Sleep -Seconds 2
-            }
-        }
-        return $false
-    }
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         try {
             $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 12
-            return $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
+                return $true
+            }
         }
         catch {
-            if ($attempt -lt 3) {
-                Start-Sleep -Seconds 2
+            $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+            if ($curl) {
+                $previousErrorActionPreference = $ErrorActionPreference
+                $ErrorActionPreference = "Continue"
+                $statusCode = & $curl.Path -L -sS --max-time 12 -o NUL -w "%{http_code}" $Url 2>$null
+                $curlExitCode = $LASTEXITCODE
+                $ErrorActionPreference = $previousErrorActionPreference
+                if ($curlExitCode -eq 0 -and [string]$statusCode -match "^[23]\d\d$") {
+                    return $true
+                }
             }
+        }
+        if ($attempt -lt 3) {
+            Start-Sleep -Seconds 2
         }
     }
     return $false
