@@ -136,7 +136,7 @@ const weather = ref<CurrentWeather>()
 const weatherLoading = ref(true)
 const guideOpen = ref(false)
 const guideIndex = ref(0)
-const loginForm = reactive({ username: 'admin', password: '' })
+const loginForm = reactive({ username: '', password: '' })
 const aiForm = reactive({
   provider: 'openai-compatible',
   base_url: 'https://api.openai.com/v1',

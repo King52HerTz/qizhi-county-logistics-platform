@@ -23,7 +23,7 @@ const busy = ref(false)
 const error = ref('')
 const message = ref('')
 const chartElement = ref<HTMLDivElement>()
-const loginForm = reactive({ username: 'admin', password: '' })
+const loginForm = reactive({ username: '', password: '' })
 echarts.use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 let chart: ECharts | undefined

@@ -24,7 +24,7 @@ const messageKind = ref<'success' | 'error' | 'info'>('info')
 const plans = ref<DispatchPlanView[]>([])
 const assignments = ref<DriverAssignmentView[]>([])
 const runs = ref<RunSummary[]>([])
-const form = reactive({ username: 'admin', password: '' })
+const form = reactive({ username: '', password: '' })
 
 const latestRun = computed(() => runs.value.find(item => item.status !== 'infeasible'))
 const latestPlan = computed(() => {

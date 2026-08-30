@@ -33,7 +33,6 @@ from app.security import hash_password
 
 def reset_demo_data() -> dict[str, object]:
     settings = get_settings()
-    preserved_users = (settings.admin_username, settings.driver_username)
 
     # The standalone reset command is also used by the local one-click demo
     # launcher.  Bring the schema to the current revision before touching any
@@ -60,10 +59,6 @@ def reset_demo_data() -> dict[str, object]:
             AuditLogRecord,
         ):
             session.execute(delete(model))
-
-        session.execute(
-            delete(UserRecord).where(UserRecord.username.not_in(preserved_users))
-        )
         if session.bind is not None and session.bind.dialect.name == "postgresql":
             for sequence in (
                 "data_import_batches_id_seq",

@@ -6,7 +6,7 @@ import { login } from '../services/api'
 import type { TokenResponse } from '../types/logistics'
 
 const emit = defineEmits<{ authenticated: [session: TokenResponse] }>()
-const username = ref('admin')
+const username = ref('')
 const password = ref('')
 const remember = ref(false)
 const showPassword = ref(false)
