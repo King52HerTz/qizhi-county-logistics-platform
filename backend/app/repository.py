@@ -4,13 +4,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.data.qidong_reference import reference_order_profile
+from app.data.qidong_reference import REFERENCE_ORDER_REQUESTS, reference_order_profile
 from app.data.scenario import get_scenario
 from app.models import (
     EventRecord,
     NodeRecord,
     OptimizationRunRecord,
     OrderRecord,
+    OrderRequestRecord,
     ScenarioVersionRecord,
     ScenarioTransitionRecord,
     UserRecord,
@@ -122,6 +123,7 @@ def seed_demo_data(session: Session) -> None:
             )
         )
     session.flush()
+    seed_demo_order_requests(session)
     for version in session.scalars(
         select(ScenarioVersionRecord).where(ScenarioVersionRecord.fingerprint.is_(None))
     ):
@@ -141,6 +143,54 @@ def seed_demo_data(session: Session) -> None:
                 actor_id=version.created_by,
             )
     session.commit()
+
+
+def seed_demo_order_requests(session: Session) -> None:
+    """Add stable pending applications for the customer approval walkthrough."""
+
+    requester = session.scalar(
+        select(UserRecord).where(
+            UserRecord.username == "customer_demo",
+            UserRecord.role == "user",
+            UserRecord.is_active.is_(True),
+        )
+    )
+    if requester is None:
+        requester = session.scalar(
+            select(UserRecord)
+            .where(UserRecord.role == "user", UserRecord.is_active.is_(True))
+            .order_by(UserRecord.id)
+        )
+    if requester is None:
+        return
+
+    for item in REFERENCE_ORDER_REQUESTS:
+        request_code = str(item["request_code"])
+        if session.scalar(
+            select(OrderRequestRecord.id).where(
+                OrderRequestRecord.request_code == request_code
+            )
+        ):
+            continue
+        session.add(
+            OrderRequestRecord(
+                request_code=request_code,
+                requester_id=requester.id,
+                node_id=str(item["node_id"]),
+                cargo_name=str(item["cargo_name"]),
+                customer_name=str(item["customer_name"]),
+                customer_phone=str(item["customer_phone"]),
+                delivery_address=str(item["delivery_address"]),
+                weight_kg=int(item["weight_kg"]),
+                window_start=int(item["window_start"]),
+                window_end=int(item["window_end"]),
+                service_minutes=int(item["service_minutes"]),
+                cold_chain=bool(item["cold_chain"]),
+                priority=str(item["priority"]),
+                status="pending_review",
+            )
+        )
+    session.flush()
 
 
 def load_scenario(session: Session, version_key: str | None = None) -> Scenario:

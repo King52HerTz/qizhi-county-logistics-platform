@@ -158,6 +158,69 @@ def reference_order_profile(order_id: str) -> dict[str, str] | None:
     return dict(profile) if profile else None
 
 
+# Fixed, fictional customer applications used to demonstrate the approval
+# workflow.  They intentionally remain pending so an administrator can review
+# them without changing the standard operating orders.
+REFERENCE_ORDER_REQUESTS: tuple[dict[str, object], ...] = (
+    {
+        "request_code": "UR-20260831-D001",
+        "node_id": "V-006",
+        "cargo_name": "鲜黄花菜",
+        "customer_name": "金源黄花菜产销合作社",
+        "customer_phone": "0734-6102001",
+        "delivery_address": "祁东县石亭子镇梅塘村冷链收货点",
+        "weight_kg": 280,
+        "window_start": 480,
+        "window_end": 660,
+        "service_minutes": 12,
+        "cold_chain": True,
+        "priority": "urgent",
+    },
+    {
+        "request_code": "UR-20260831-D002",
+        "node_id": "V-009",
+        "cargo_name": "优质稻米",
+        "customer_name": "金城粮食产销合作社",
+        "customer_phone": "0734-6102002",
+        "delivery_address": "祁东县金桥镇金城村粮食服务站",
+        "weight_kg": 420,
+        "window_start": 540,
+        "window_end": 780,
+        "service_minutes": 10,
+        "cold_chain": False,
+        "priority": "normal",
+    },
+    {
+        "request_code": "UR-20260831-D003",
+        "node_id": "V-015",
+        "cargo_name": "时令果蔬",
+        "customer_name": "福缘生鲜集配中心",
+        "customer_phone": "0734-6102003",
+        "delivery_address": "祁东县过水坪镇福缘村冷链收货点",
+        "weight_kg": 360,
+        "window_start": 450,
+        "window_end": 630,
+        "service_minutes": 15,
+        "cold_chain": True,
+        "priority": "normal",
+    },
+    {
+        "request_code": "UR-20260831-D004",
+        "node_id": "V-016",
+        "cargo_name": "农资用品",
+        "customer_name": "罗云村便民服务站",
+        "customer_phone": "0734-6102004",
+        "delivery_address": "祁东县白鹤街道罗云村综合服务站",
+        "weight_kg": 160,
+        "window_start": 600,
+        "window_end": 840,
+        "service_minutes": 8,
+        "cold_chain": False,
+        "priority": "normal",
+    },
+)
+
+
 AHP_WEIGHTS: tuple[dict[str, float | str], ...] = (
     {"code": "C1", "label": "坡度", "weight": 0.109},
     {"code": "C2", "label": "海拔", "weight": 0.055},
