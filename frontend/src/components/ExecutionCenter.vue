@@ -2,17 +2,17 @@
 import {
   ArrowRight, CheckCheck, CircleCheckBig, ClipboardCheck,
   Download, KeyRound, LogOut, MapPin, Navigation, PackageCheck,
-  Play, Route, ShieldCheck, Truck,
+  Play, Route, ShieldCheck, Truck, X,
 } from '@lucide/vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import {
   advanceDriverAssignment, approveDispatchPlan, clearAdminSession,
   downloadDispatchReport, getDispatchPlans, getDriverAssignments,
   getRunHistory, getSessionRole, hasSession, issueDispatchPlan, login,
-  submitDispatchPlan,
+  planDriverNavigation, submitDispatchPlan,
 } from '../services/api'
 import type {
-  DispatchPlanView, DriverAssignmentView, RunSummary,
+  DispatchPlanView, DriverAssignmentView, DriverNavigationRoute, RunSummary,
 } from '../types/logistics'
 
 const emit = defineEmits<{ sessionChange: [role: string] }>()
@@ -24,6 +24,8 @@ const messageKind = ref<'success' | 'error' | 'info'>('info')
 const plans = ref<DispatchPlanView[]>([])
 const assignments = ref<DriverAssignmentView[]>([])
 const runs = ref<RunSummary[]>([])
+const navigationPreview = ref<DriverNavigationRoute | null>(null)
+const navigationLoading = ref(false)
 const form = reactive({ username: '', password: '' })
 
 const latestRun = computed(() => runs.value.find(item => item.status !== 'infeasible'))
@@ -151,6 +153,9 @@ async function runAssignmentAction(
       start: `${assignment.plate} 已发车`,
       complete: `${assignment.plate} 已完成配送`,
     }[action]
+    if (action === 'complete' && navigationPreview.value?.assignment_id === assignment.id) {
+      navigationPreview.value = null
+    }
     await loadWorkspace()
   } catch (cause) {
     messageKind.value = 'error'
@@ -171,27 +176,127 @@ function stopActionLabel(action?: 'pickup' | 'delivery') {
   return action === 'pickup' ? '取货' : '送货'
 }
 
-function openNavigation(assignment: DriverAssignmentView) {
+function browserLocation(): Promise<{ longitude: number; latitude: number } | null> {
+  if (!navigator.geolocation) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => resolve({ longitude: coords.longitude, latitude: coords.latitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, maximumAge: 30_000, timeout: 3_500 },
+    )
+  })
+}
+
+function formatStepDistance(meters: number) {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`
+}
+
+function formatStepDuration(seconds: number) {
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))} 秒`
+  return `${Math.max(1, Math.round(seconds / 60))} 分钟`
+}
+
+function routeSourceLabel(route: DriverNavigationRoute) {
+  return route.routing_source === 'osrm' ? 'OSRM 真实路网' : '计划路线估算'
+}
+
+function originSourceLabel(route: DriverNavigationRoute) {
+  return route.origin_source === 'gps' ? '设备定位' : '计划位置'
+}
+
+function routeSketchCoordinate(
+  route: DriverNavigationRoute,
+  endpoint: 'origin' | 'destination',
+) {
+  const geometry = route.geometry.length >= 2
+    ? route.geometry
+    : [[route.origin.longitude, route.origin.latitude], [route.destination.longitude, route.destination.latitude]] as [number, number][]
+  const longitudes = geometry.map(point => point[0])
+  const latitudes = geometry.map(point => point[1])
+  const minLongitude = Math.min(...longitudes)
+  const maxLongitude = Math.max(...longitudes)
+  const minLatitude = Math.min(...latitudes)
+  const maxLatitude = Math.max(...latitudes)
+  const longitudeRange = Math.max(maxLongitude - minLongitude, 0.000001)
+  const latitudeRange = Math.max(maxLatitude - minLatitude, 0.000001)
+  const position = endpoint === 'origin' ? route.origin : route.destination
+  const x = 12 + ((position.longitude - minLongitude) / longitudeRange) * 176
+  const y = 60 - ((position.latitude - minLatitude) / latitudeRange) * 48
+  return `${Math.max(8, Math.min(192, x)).toFixed(1)},${Math.max(8, Math.min(64, y)).toFixed(1)}`
+}
+
+function routeSketchPoints(route: DriverNavigationRoute) {
+  const geometry = route.geometry.length >= 2
+    ? route.geometry
+    : [[route.origin.longitude, route.origin.latitude], [route.destination.longitude, route.destination.latitude]] as [number, number][]
+  const longitudes = geometry.map(point => point[0])
+  const latitudes = geometry.map(point => point[1])
+  const minLongitude = Math.min(...longitudes)
+  const maxLongitude = Math.max(...longitudes)
+  const minLatitude = Math.min(...latitudes)
+  const maxLatitude = Math.max(...latitudes)
+  const longitudeRange = Math.max(maxLongitude - minLongitude, 0.000001)
+  const latitudeRange = Math.max(maxLatitude - minLatitude, 0.000001)
+  return geometry.map(([longitude, latitude]) => {
+    const x = 12 + ((longitude - minLongitude) / longitudeRange) * 176
+    const y = 60 - ((latitude - minLatitude) / latitudeRange) * 48
+    return `${Math.max(8, Math.min(192, x)).toFixed(1)},${Math.max(8, Math.min(64, y)).toFixed(1)}`
+  }).join(' ')
+}
+
+function amapNavigationUrl(route: DriverNavigationRoute) {
+  const navigationUrl = new URL('https://uri.amap.com/navigation')
+  const from = `${route.origin.longitude.toFixed(6)},${route.origin.latitude.toFixed(6)},${route.origin.name}`
+  const to = `${route.destination.longitude.toFixed(6)},${route.destination.latitude.toFixed(6)},${route.destination.name}`
+  navigationUrl.searchParams.set('from', from)
+  navigationUrl.searchParams.set('to', to)
+  navigationUrl.searchParams.set('mode', 'car')
+  navigationUrl.searchParams.set('policy', '0')
+  navigationUrl.searchParams.set('src', 'qizhi-logistics')
+  navigationUrl.searchParams.set('callnative', /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? '1' : '0')
+  return navigationUrl.toString()
+}
+
+function openAmapNavigation(route: DriverNavigationRoute) {
+  const url = amapNavigationUrl(route)
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  if (!opened) window.location.assign(url)
+  messageKind.value = 'success'
+  message.value = `已打开高德路线：${route.origin.name} → ${route.destination.name}`
+}
+
+async function openNavigation(assignment: DriverAssignmentView) {
   const stop = assignment.next_stop
   if (!stop) {
     messageKind.value = 'info'
     message.value = '当前任务没有待导航站点'
     return
   }
-
-  const target = `${stop.longitude.toFixed(6)},${stop.latitude.toFixed(6)},${encodeURIComponent(stop.node_name)}`
-  const navigationUrl = new URL('https://uri.amap.com/navigation')
-  navigationUrl.searchParams.set('to', target)
-  navigationUrl.searchParams.set('mode', 'car')
-  navigationUrl.searchParams.set('policy', '0')
-  navigationUrl.searchParams.set('src', 'qizhi-logistics')
-  navigationUrl.searchParams.set('callnative', '0')
-  const opened = window.open(navigationUrl.toString(), '_blank', 'noopener,noreferrer')
-  if (!opened) {
-    window.location.assign(navigationUrl.toString())
+  navigationLoading.value = true
+  try {
+    const location = await browserLocation()
+    const route = await planDriverNavigation(
+      assignment.id,
+      location
+        ? {
+            longitude: location.longitude,
+            latitude: location.latitude,
+            name: '车辆当前位置',
+            coordinateSystem: 'wgs84',
+          }
+        : undefined,
+    )
+    navigationPreview.value = route
+    messageKind.value = route.fallback_used ? 'info' : 'success'
+    message.value = location
+      ? `已规划车辆当前位置到${route.destination.name}的路线`
+      : `未获取设备定位，已按${route.origin.name}规划到${route.destination.name}的路线`
+  } catch (cause) {
+    messageKind.value = 'error'
+    message.value = cause instanceof Error ? cause.message : `无法规划到${stop.node_name}的路线`
+  } finally {
+    navigationLoading.value = false
   }
-  messageKind.value = 'success'
-  message.value = `已打开高德导航：${stop.node_name}`
 }
 
 async function saveReport(plan: DispatchPlanView) {
@@ -331,6 +436,36 @@ onMounted(loadWorkspace)
               </li>
             </ol>
           </div>
+          <section v-if="navigationPreview?.assignment_id === item.id" class="navigation-preview">
+            <header>
+              <div><span>下一站路线</span><strong>{{ navigationPreview.destination.name }}</strong></div>
+              <button type="button" class="navigation-close" aria-label="关闭路线预览" @click="navigationPreview = null"><X :size="15" /></button>
+            </header>
+            <div class="navigation-endpoints">
+              <div><small>起点 · {{ originSourceLabel(navigationPreview) }}</small><b>{{ navigationPreview.origin.name }}</b></div>
+              <span>→</span>
+              <div><small>{{ stopActionLabel(item.next_stop?.action) }} · 第 {{ navigationPreview.stop_sequence }} 站</small><b>{{ navigationPreview.destination.name }}</b></div>
+            </div>
+            <div class="navigation-sketch" aria-label="路线示意图">
+              <svg viewBox="0 0 200 72" role="img">
+                <polyline :points="routeSketchPoints(navigationPreview)" fill="none" stroke="#39a8df" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                <circle :cx="routeSketchCoordinate(navigationPreview, 'origin').split(',')[0]" :cy="routeSketchCoordinate(navigationPreview, 'origin').split(',')[1]" r="4.5" fill="#126fa6" />
+                <circle :cx="routeSketchCoordinate(navigationPreview, 'destination').split(',')[0]" :cy="routeSketchCoordinate(navigationPreview, 'destination').split(',')[1]" r="4.5" fill="#f2b43f" />
+              </svg>
+            </div>
+            <div class="navigation-metrics">
+              <div><small>预计距离</small><b>{{ navigationPreview.distance_km.toFixed(1) }} km</b></div>
+              <div><small>预计耗时</small><b>{{ navigationPreview.duration_minutes }} 分钟</b></div>
+              <div><small>规划来源</small><b>{{ routeSourceLabel(navigationPreview) }}</b></div>
+            </div>
+            <ol v-if="navigationPreview.steps.length" class="navigation-steps">
+              <li v-for="step in navigationPreview.steps.slice(0, 5)" :key="`${navigationPreview.assignment_id}-${step.sequence}`">
+                <span>{{ step.sequence }}</span><p><b>{{ step.instruction }}</b><small>{{ formatStepDistance(step.distance_m) }} · {{ formatStepDuration(step.duration_seconds) }}</small></p>
+              </li>
+            </ol>
+            <p v-if="navigationPreview.fallback_used" class="navigation-fallback">路网服务暂不可用，当前为计划路线估算；仍可打开高德重新规划。</p>
+            <button type="button" class="navigation-open-amap" @click="openAmapNavigation(navigationPreview)"><Navigation :size="15" />在高德中导航</button>
+          </section>
           <dl>
             <div><dt>里程</dt><dd>{{ item.distance_km }} km</dd></div>
             <div><dt>停靠</dt><dd>{{ item.stop_count }} 站</dd></div>
@@ -339,11 +474,11 @@ onMounted(loadWorkspace)
           </dl>
           <button v-if="item.status === 'pending'" :disabled="busy" @click="runAssignmentAction(item,'accept')"><PackageCheck :size="16" />确认接单</button>
           <div v-else-if="item.status === 'accepted'" class="driver-actions">
-            <button class="driver-nav-button" :disabled="busy || !item.next_stop" @click="openNavigation(item)"><Navigation :size="16" />开始导航</button>
+            <button class="driver-nav-button" :disabled="busy || navigationLoading || !item.next_stop" @click="openNavigation(item)"><Navigation :size="16" />{{ navigationLoading && navigationPreview?.assignment_id === item.id ? '正在规划' : '规划并导航' }}</button>
             <button :disabled="busy" @click="runAssignmentAction(item,'start')"><Play :size="16" />确认发车</button>
           </div>
           <div v-else-if="item.status === 'executing'" class="driver-actions">
-            <button class="driver-nav-button" :disabled="busy || !item.next_stop" @click="openNavigation(item)"><Navigation :size="16" />继续导航</button>
+            <button class="driver-nav-button" :disabled="busy || navigationLoading || !item.next_stop" @click="openNavigation(item)"><Navigation :size="16" />{{ navigationLoading && navigationPreview?.assignment_id === item.id ? '正在规划' : '重新规划' }}</button>
             <button :disabled="busy" @click="runAssignmentAction(item,'complete')"><CheckCheck :size="16" />完成配送</button>
           </div>
           <div v-else class="task-complete"><CircleCheckBig :size="17" />配送已完成</div>
@@ -355,6 +490,7 @@ onMounted(loadWorkspace)
 </template>
 
 <style scoped>
+.navigation-preview{margin:0 0 14px;padding:13px;background:#f7fbfd;border:1px solid #cfe4f0;border-radius:10px}.navigation-preview>header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}.navigation-preview header span,.navigation-preview header strong{display:block}.navigation-preview header span{font-size:8px;color:#5e8295}.navigation-preview header strong{margin-top:3px;font-size:12px;color:#144865}.navigation-close{width:26px!important;min-height:26px!important;padding:0!important;background:#e8f3f8!important;color:#4a7489!important}.navigation-endpoints{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}.navigation-endpoints>span{color:#6f99ad;font-weight:700}.navigation-endpoints div{min-width:0}.navigation-endpoints small,.navigation-endpoints b{display:block}.navigation-endpoints small{font-size:8px;color:#72909e}.navigation-endpoints b{margin-top:3px;font-size:9px;color:#234b5f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.navigation-sketch{height:82px;margin:11px 0 9px;padding:4px 0;background:linear-gradient(135deg,#edf8fb,#f8fcfd);border:1px solid #d8eaf1;border-radius:8px}.navigation-sketch svg{display:block;width:100%;height:100%}.navigation-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}.navigation-metrics div{padding:7px 6px;background:#fff;border:1px solid #e2edf1;border-radius:7px}.navigation-metrics small,.navigation-metrics b{display:block}.navigation-metrics small{font-size:8px;color:#79929c}.navigation-metrics b{margin-top:3px;font-size:9px;color:#15506c}.navigation-steps{display:grid;gap:5px;list-style:none;padding:0;margin:0 0 10px}.navigation-steps li{display:flex;gap:7px;align-items:flex-start}.navigation-steps li>span{width:17px;height:17px;flex:none;display:grid;place-items:center;border-radius:50%;background:#d9edf7;color:#126fa6;font-size:8px;font-weight:700}.navigation-steps p{min-width:0;margin:0}.navigation-steps b,.navigation-steps small{display:block}.navigation-steps b{font-size:8px;line-height:1.4;color:#345462}.navigation-steps small{margin-top:2px;font-size:7px;color:#82969e}.navigation-fallback{margin:0 0 9px;font-size:8px;line-height:1.5;color:#9b6b19}.navigation-open-amap{background:#126fa6!important}.navigation-open-amap:hover{background:#0e5b87!important}
 .execution-center{display:flex;flex-direction:column;gap:14px}.execution-login{width:min(720px,100%);margin:30px auto;padding:30px;background:#fff;border:1px solid #e0e7e2;border-radius:15px;box-shadow:0 18px 45px rgba(22,65,41,.08);display:grid;grid-template-columns:64px 1fr;gap:8px 18px}.login-visual{grid-row:1/3;width:54px;height:54px;display:grid;place-items:center;border-radius:14px;background:#e8f5ee;color:#16834f}.login-copy h2{margin:2px 0 5px;font-size:20px;color:#133c28}.login-copy p{margin:0;color:#78867e;font-size:11px}.execution-login form{grid-column:1/3;display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:20px}.execution-login label span{display:block;font-size:10px;color:#637169;margin-bottom:6px}.execution-login input{width:100%;height:40px;border:1px solid #dce4de;border-radius:8px;padding:0 11px;outline:none}.execution-primary,.report-button,.driver-task button{border:0;border-radius:8px;padding:0 15px;background:#14844d;color:#fff;display:flex;align-items:center;justify-content:center;gap:7px;font-weight:700;cursor:pointer;min-height:40px}.execution-primary:disabled,.driver-task button:disabled{opacity:.6}.demo-account{grid-column:1/3;margin:3px 0 0;color:#8a968f;font-size:10px}.execution-message{padding:10px 13px;border-radius:8px;font-size:11px}.execution-message.success{color:#157444;background:#eaf7ef}.execution-message.error{color:#b33e39;background:#fff0ee}.execution-message.info{color:#48675a;background:#edf4f0}.execution-login .execution-message{grid-column:1/3}.execution-toolbar{height:48px;padding:0 15px;background:#103f2a;color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:space-between}.execution-toolbar>div,.execution-toolbar button{display:flex;align-items:center;gap:8px}.execution-toolbar b{font-size:9px;background:#f2b43f;color:#173a29;padding:3px 7px;border-radius:9px}.execution-toolbar button{border:0;background:transparent;color:#bcd2c6;cursor:pointer}.execution-hero{padding:20px 22px;background:linear-gradient(115deg,#0d4c31,#176f46);color:#fff;border-radius:13px;display:grid;grid-template-columns:1fr auto auto;gap:32px;align-items:center}.execution-hero p{margin:0 0 6px;color:#a9cdbb;font-size:10px}.execution-hero h2{margin:0 0 5px;font-size:23px}.execution-hero>div>span{color:#bad0c5;font-size:10px}.hero-metrics{display:flex;gap:30px}.hero-metrics p{min-width:72px}.hero-metrics span,.hero-metrics b{display:block}.hero-metrics b{font-size:20px;color:#fff;margin-top:5px}.hero-metrics small{font-size:9px;margin-left:3px}.execution-hero .execution-primary,.execution-hero .report-button{background:#f2b43f;color:#153a29}.execution-flow{display:grid;grid-template-columns:repeat(6,1fr);padding:17px 20px;background:#fff;border:1px solid #e2e8e3;border-radius:12px}.flow-step{position:relative;display:flex;align-items:center;gap:8px;color:#9aa59f}.flow-step>span{width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:#edf1ee}.flow-step p{margin:0}.flow-step strong,.flow-step small{display:block}.flow-step strong{font-size:10px}.flow-step small{font-size:8px;margin-top:3px}.flow-step>svg{position:absolute;right:8px;color:#cad3cd}.flow-step.done{color:#17834f}.flow-step.done>span{color:#fff;background:#17834f}.flow-step.current strong{color:#16452e}.execution-grid{display:grid;grid-template-columns:minmax(650px,1fr) 285px;gap:14px}.execution-list,.audit-card{background:#fff;border:1px solid #e2e8e3;border-radius:12px}.execution-list{padding:17px}.execution-list header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:1px solid #e8ece9}.execution-list h2{margin:0;font-size:15px}.execution-list header p{margin:4px 0 0;color:#849087;font-size:9px}.execution-list header>span{font-size:9px;color:#17834f;background:#eaf6ef;padding:5px 8px;border-radius:7px}.assignment-row{display:grid;grid-template-columns:38px 1fr 100px 72px;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #edf0ee}.truck-icon{width:34px;height:34px;display:grid;place-items:center;color:#16834f;background:#eaf6ef;border-radius:8px}.assignment-row strong,.assignment-row small{display:block}.assignment-row strong{font-size:11px}.assignment-row small{color:#849087;font-size:8px;margin-top:4px}.assignment-row p{margin:0}.assignment-row p b{font-size:11px}.assignment-status{text-align:center;font-size:9px;padding:5px 7px;border-radius:7px;background:#eef2ef;color:#637169}.assignment-status.accepted,.assignment-status.executing{background:#e9f3ff;color:#2878d0}.assignment-status.completed{background:#e9f6ee;color:#17834f}.audit-card{padding:22px;color:#315143}.audit-card>svg{color:#17834f}.audit-card h3{margin:12px 0 7px}.audit-card p{font-size:10px;line-height:1.7;color:#77857d}.audit-card ul{list-style:none;padding:12px 0 0;margin:14px 0 0;border-top:1px solid #e6ebe7}.audit-card li{display:flex;gap:6px;margin:9px 0;font-size:9px;color:#587064}.audit-card li svg{color:#17834f}.execution-empty{padding:30px;text-align:center;color:#8a968f;font-size:10px}.driver-toolbar{background:#143f5f}.driver-summary{display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border:1px solid #e1e7e2;border-radius:12px}.driver-summary>div{padding:17px 22px;border-right:1px solid #e6ebe7}.driver-summary>div:last-child{border:0}.driver-summary span,.driver-summary b{display:block}.driver-summary span{font-size:10px;color:#7b8981}.driver-summary b{font-size:20px;color:#16462f;margin-top:6px}.driver-task-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.driver-task{padding:17px;background:#fff;border:1px solid #e0e7e2;border-top:4px solid #f2b43f;border-radius:12px}.driver-task.accepted{border-top-color:#2878d0}.driver-task.executing{border-top-color:#17834f}.driver-task.completed{border-top-color:#91a199}.driver-task header{display:flex;align-items:center;gap:9px}.driver-task header>span{width:35px;height:35px;display:grid;place-items:center;background:#edf5f0;color:#17834f;border-radius:9px}.driver-task header div{flex:1}.driver-task header strong,.driver-task header small{display:block}.driver-task header strong{font-size:12px}.driver-task header small{font-size:8px;color:#849087;margin-top:4px}.driver-task header>b{font-size:9px;color:#5c6b63}.task-route{display:flex;align-items:center;gap:9px;margin:16px 0;padding:12px;background:#f2f6f3;border-radius:9px;color:#17834f}.task-route p{margin:0}.task-route span,.task-route strong{display:block}.task-route span{font-size:8px;color:#7d8982}.task-route strong{font-size:11px;margin-top:3px}.driver-task dl{display:grid;grid-template-columns:1fr 1fr;margin:0 0 14px}.driver-task dl>div{padding:8px;border-bottom:1px solid #edf0ee}.driver-task dt{font-size:8px;color:#88948d}.driver-task dd{margin:4px 0 0;font-size:10px;font-weight:700}.driver-task button{width:100%}.task-complete{height:40px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;color:#17834f;background:#eaf6ef;font-size:10px}.driver-empty{grid-column:1/4;background:#fff;border-radius:12px}
 .execution-center{display:flex;flex-direction:column;gap:14px}.execution-login{width:min(720px,100%);margin:30px auto;padding:30px;background:#fff;border:1px solid #e0e7e2;border-radius:15px;box-shadow:0 18px 45px rgba(22,65,41,.08);display:grid;grid-template-columns:64px 1fr;gap:8px 18px}.login-visual{grid-row:1/3;width:54px;height:54px;display:grid;place-items:center;border-radius:14px;background:#e8f5ee;color:#16834f}.login-copy h2{margin:2px 0 5px;font-size:20px;color:#133c28}.login-copy p{margin:0;color:#78867e;font-size:11px}.execution-login form{grid-column:1/3;display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:20px}.execution-login label span{display:block;font-size:10px;color:#637169;margin-bottom:6px}.execution-login input{width:100%;height:40px;border:1px solid #dce4de;border-radius:8px;padding:0 11px;outline:none}.execution-primary,.report-button,.driver-task button{border:0;border-radius:8px;padding:0 15px;background:#14844d;color:#fff;display:flex;align-items:center;justify-content:center;gap:7px;font-weight:700;cursor:pointer;min-height:40px}.execution-primary:disabled,.driver-task button:disabled{opacity:.6}.demo-account{grid-column:1/3;margin:3px 0 0;color:#8a968f;font-size:10px}.execution-message{padding:10px 13px;border-radius:8px;font-size:11px}.execution-message.success{color:#157444;background:#eaf7ef}.execution-message.error{color:#b33e39;background:#fff0ee}.execution-message.info{color:#48675a;background:#edf4f0}.execution-login .execution-message{grid-column:1/3}.execution-toolbar{height:48px;padding:0 15px;background:#103f2a;color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:space-between}.execution-toolbar>div,.execution-toolbar button{display:flex;align-items:center;gap:8px}.execution-toolbar b{font-size:9px;background:#f2b43f;color:#173a29;padding:3px 7px;border-radius:9px}.execution-toolbar button{border:0;background:transparent;color:#bcd2c6;cursor:pointer}.execution-hero{padding:20px 22px;background:linear-gradient(115deg,#0d4c31,#176f46);color:#fff;border-radius:13px;display:grid;grid-template-columns:1fr auto auto;gap:32px;align-items:center}.execution-hero p{margin:0 0 6px;color:#a9cdbb;font-size:10px}.execution-hero h2{margin:0 0 5px;font-size:23px}.execution-hero>div>span{color:#bad0c5;font-size:10px}.hero-metrics{display:flex;gap:30px}.hero-metrics p{min-width:72px}.hero-metrics span,.hero-metrics b{display:block}.hero-metrics b{font-size:20px;color:#fff;margin-top:5px}.hero-metrics small{font-size:9px;margin-left:3px}.execution-hero .execution-primary,.execution-hero .report-button{background:#f2b43f;color:#153a29}.execution-flow{display:grid;grid-template-columns:repeat(6,1fr);padding:17px 20px;background:#fff;border:1px solid #e2e8e3;border-radius:12px}.flow-step{position:relative;display:flex;align-items:center;gap:8px;color:#9aa59f}.flow-step>span{width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:#edf1ee}.flow-step p{margin:0}.flow-step strong,.flow-step small{display:block}.flow-step strong{font-size:10px}.flow-step small{font-size:8px;margin-top:3px}.flow-step>svg{position:absolute;right:8px;color:#cad3cd}.flow-step.done{color:#17834f}.flow-step.done>span{color:#fff;background:#17834f}.flow-step.current strong{color:#16452e}.execution-grid{display:grid;grid-template-columns:minmax(650px,1fr) 285px;gap:14px}.execution-list,.audit-card{background:#fff;border:1px solid #e2e8e3;border-radius:12px}.execution-list{padding:17px}.execution-list header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:1px solid #e8ece9}.execution-list h2{margin:0;font-size:15px}.execution-list header p{margin:4px 0 0;color:#849087;font-size:9px}.execution-list header>span{font-size:9px;color:#17834f;background:#eaf6ef;padding:5px 8px;border-radius:7px}.assignment-row{display:grid;grid-template-columns:38px 1fr 100px 72px;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #edf0ee}.truck-icon{width:34px;height:34px;display:grid;place-items:center;color:#16834f;background:#eaf6ef;border-radius:8px}.assignment-row strong,.assignment-row small{display:block}.assignment-row strong{font-size:11px}.assignment-row small{color:#849087;font-size:8px;margin-top:4px}.assignment-row p{margin:0}.assignment-row p b{font-size:11px}.assignment-status{text-align:center;font-size:9px;padding:5px 7px;border-radius:7px;background:#eef2ef;color:#637169}.assignment-status.accepted,.assignment-status.executing{background:#e9f3ff;color:#2878d0}.assignment-status.completed{background:#e9f6ee;color:#17834f}.audit-card{padding:22px;color:#315143}.audit-card>svg{color:#17834f}.audit-card h3{margin:12px 0 7px}.audit-card p{font-size:10px;line-height:1.7;color:#77857d}.audit-card ul{list-style:none;padding:12px 0 0;margin:14px 0 0;border-top:1px solid #e6ebe7}.audit-card li{display:flex;gap:6px;margin:9px 0;font-size:9px;color:#587064}.audit-card li svg{color:#17834f}.execution-empty{padding:30px;text-align:center;color:#8a968f;font-size:10px}.driver-toolbar{background:#143f5f}.driver-summary{display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border:1px solid #e1e7e2;border-radius:12px}.driver-summary>div{padding:17px 22px;border-right:1px solid #e6ebe7}.driver-summary>div:last-child{border:0}.driver-summary span,.driver-summary b{display:block}.driver-summary span{font-size:10px;color:#7b8981}.driver-summary b{font-size:20px;color:#16462f;margin-top:6px}.driver-task-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.driver-task{padding:17px;background:#fff;border:1px solid #e0e7e2;border-top:4px solid #f2b43f;border-radius:12px}.driver-task.accepted{border-top-color:#2878d0}.driver-task.executing{border-top-color:#17834f}.driver-task.completed{border-top-color:#91a199}.driver-task header{display:flex;align-items:center;gap:9px}.driver-task header>span{width:35px;height:35px;display:grid;place-items:center;background:#edf5f0;color:#17834f;border-radius:9px}.driver-task header div{flex:1}.driver-task header strong,.driver-task header small{display:block}.driver-task header strong{font-size:12px}.driver-task header small{font-size:8px;color:#849087;margin-top:4px}.driver-task header>b{font-size:9px;color:#5c6b63}.task-route{display:flex;align-items:center;gap:9px;margin:16px 0;padding:12px;background:#f2f6f3;border-radius:9px;color:#17834f}.task-route p{margin:0}.task-route span,.task-route strong{display:block}.task-route span{font-size:8px;color:#7d8982}.task-route strong{font-size:11px;margin-top:3px}.driver-task dl{display:grid;grid-template-columns:1fr 1fr;margin:0 0 14px}.driver-task dl>div{padding:8px;border-bottom:1px solid #edf0ee}.driver-task dt{font-size:8px;color:#88948d}.driver-task dd{margin:4px 0 0;font-size:10px;font-weight:700}.driver-task button{width:100%}.driver-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.driver-actions button{min-width:0;padding:0 8px}.driver-nav-button{background:#126fa6!important}.task-complete{height:40px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;color:#17834f;background:#eaf6ef;font-size:10px}.task-stops{margin:0 0 14px;padding:10px 12px;background:#fbfcfb;border:1px solid #e6ece8;border-radius:8px}.task-stops-heading{display:flex;justify-content:space-between;align-items:center;color:#6d7c73;font-size:9px}.task-stops-heading small{color:#96a29b}.task-stops ol{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;list-style:none;padding:8px 0 0;margin:0}.task-stops li{display:flex;align-items:center;gap:5px;min-width:0;color:#7f8c84;font-size:8px}.task-stops li>span{width:17px;height:17px;display:grid;place-items:center;flex:none;border-radius:50%;background:#eef2ef;color:#6e7c74;font-size:8px}.task-stops li b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}.task-stops li.current{color:#126fa6}.task-stops li.current>span{background:#d9edfb;color:#126fa6;font-weight:700}.task-stops li.completed{color:#17834f}.task-stops li.completed>span{background:#dff2e7;color:#17834f}.driver-empty{grid-column:1/4;background:#fff;border-radius:12px}
 </style>

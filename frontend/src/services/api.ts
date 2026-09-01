@@ -8,6 +8,7 @@ import type {
   DispatchPlanList,
   DispatchPlanView,
   DriverAssignmentList,
+  DriverNavigationRoute,
   ExperimentList,
   ExperimentView,
   OptimizeResult,
@@ -504,6 +505,28 @@ export const issueDispatchPlan = (planId: number) =>
   })
 export const getDriverAssignments = () =>
   authenticatedRequest<DriverAssignmentList>('/driver/assignments')
+export const planDriverNavigation = (
+  assignmentId: number,
+  origin?: {
+    longitude: number
+    latitude: number
+    name?: string
+    coordinateSystem?: 'wgs84' | 'gcj02'
+  },
+) =>
+  authenticatedRequest<DriverNavigationRoute>(
+    `/driver/assignments/${assignmentId}/navigation`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        origin_longitude: origin?.longitude,
+        origin_latitude: origin?.latitude,
+        origin_name: origin?.name,
+        origin_source: origin ? 'gps' : 'planned',
+        origin_coordinate_system: origin?.coordinateSystem ?? (origin ? 'wgs84' : 'gcj02'),
+      }),
+    },
+  )
 export const advanceDriverAssignment = (
   assignmentId: number,
   action: 'accept' | 'start' | 'complete',

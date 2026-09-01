@@ -848,6 +848,39 @@ export interface DriverNavigationStop {
   cargo_category?: 'agricultural' | 'industrial'
 }
 
+export interface NavigationPosition {
+  name: string
+  longitude: number
+  latitude: number
+  coordinate_system: 'gcj02'
+}
+
+export interface NavigationStep {
+  sequence: number
+  instruction: string
+  distance_m: number
+  duration_seconds: number
+  road_name?: string
+  maneuver?: string
+}
+
+export interface DriverNavigationRoute {
+  assignment_id: number
+  route_index: number
+  stop_sequence: number
+  origin_source: 'gps' | 'planned'
+  origin: NavigationPosition
+  destination: NavigationPosition
+  distance_km: number
+  duration_minutes: number
+  routing_source: 'osrm' | 'haversine'
+  fallback_used: boolean
+  fallback_reason?: string
+  geometry: [number, number][]
+  steps: NavigationStep[]
+  generated_at: string
+}
+
 export interface DriverAssignmentView {
   id: number
   plan_id: number
