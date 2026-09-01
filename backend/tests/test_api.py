@@ -656,6 +656,10 @@ def test_dispatch_approval_driver_execution_and_report(client: TestClient) -> No
     ]
     assert len(plan_assignments) == len(optimized.json()["routes"])
     for assignment in plan_assignments:
+        assert assignment["navigation_stops"]
+        assert assignment["next_stop"]["node_name"] == assignment["next_stop_name"]
+        assert assignment["next_stop"]["longitude"]
+        assert assignment["next_stop"]["latitude"]
         assignment_id = assignment["id"]
         assert client.post(
             f"/api/v1/driver/assignments/{assignment_id}/accept",

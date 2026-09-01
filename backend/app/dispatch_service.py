@@ -14,7 +14,11 @@ from app.models import (
     OrderRecord,
     UserRecord,
 )
-from app.schemas import DispatchPlanView, DriverAssignmentView
+from app.schemas import (
+    DispatchPlanView,
+    DriverAssignmentView,
+    DriverNavigationStop,
+)
 
 
 class DispatchWorkflowError(ValueError):
@@ -302,8 +306,29 @@ def advance_assignment(
 def assignment_view(record: DriverAssignmentRecord) -> DriverAssignmentView:
     route = record.route_payload
     stops = route.get("stops", [])
+    navigation_stops = [
+        DriverNavigationStop(
+            sequence=sequence,
+            order_id=stop.get("order_id"),
+            node_id=str(stop.get("node_id", "")),
+            node_name=str(stop.get("node_name", "")),
+            longitude=float(stop.get("longitude", 0)),
+            latitude=float(stop.get("latitude", 0)),
+            arrival_minute=int(stop.get("arrival_minute", 0)),
+            load_kg=int(stop.get("load_kg", 0)),
+            status=(
+                "completed"
+                if stop.get("status") == "completed"
+                else "planned"
+            ),
+        )
+        for sequence, stop in enumerate(
+            (item for item in stops if item.get("status") != "depot"),
+            start=1,
+        )
+    ]
     next_stop = next(
-        (stop.get("node_name") for stop in stops if stop.get("status") != "depot"),
+        (stop for stop in navigation_stops if stop.status != "completed"),
         None,
     )
     return DriverAssignmentView(
@@ -318,7 +343,9 @@ def assignment_view(record: DriverAssignmentRecord) -> DriverAssignmentView:
         duration_minutes=int(route.get("duration_minutes", 0)),
         load_kg=int(route.get("load_kg", 0)),
         stop_count=max(0, len(stops) - 2),
-        next_stop_name=next_stop,
+        next_stop_name=next_stop.node_name if next_stop else None,
+        next_stop=next_stop,
+        navigation_stops=navigation_stops,
         accepted_at=record.accepted_at,
         started_at=record.started_at,
         completed_at=record.completed_at,

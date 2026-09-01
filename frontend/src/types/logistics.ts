@@ -804,6 +804,18 @@ export type DispatchPlanStatus =
 
 export type DriverAssignmentStatus = 'pending' | 'accepted' | 'executing' | 'completed'
 
+export interface DriverNavigationStop {
+  sequence: number
+  order_id?: string
+  node_id: string
+  node_name: string
+  longitude: number
+  latitude: number
+  arrival_minute: number
+  load_kg: number
+  status: 'planned' | 'completed'
+}
+
 export interface DriverAssignmentView {
   id: number
   plan_id: number
@@ -817,6 +829,8 @@ export interface DriverAssignmentView {
   load_kg: number
   stop_count: number
   next_stop_name?: string
+  next_stop?: DriverNavigationStop
+  navigation_stops: DriverNavigationStop[]
   accepted_at?: string
   started_at?: string
   completed_at?: string

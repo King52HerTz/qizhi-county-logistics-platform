@@ -669,6 +669,18 @@ class AssignmentActionRequest(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
+class DriverNavigationStop(BaseModel):
+    sequence: int
+    order_id: str | None
+    node_id: str
+    node_name: str
+    longitude: float
+    latitude: float
+    arrival_minute: int
+    load_kg: int
+    status: Literal["planned", "completed"] = "planned"
+
+
 class DriverAssignmentView(BaseModel):
     id: int
     plan_id: int
@@ -682,6 +694,8 @@ class DriverAssignmentView(BaseModel):
     load_kg: int
     stop_count: int
     next_stop_name: str | None
+    next_stop: DriverNavigationStop | None
+    navigation_stops: list[DriverNavigationStop]
     accepted_at: datetime | None
     started_at: datetime | None
     completed_at: datetime | None
