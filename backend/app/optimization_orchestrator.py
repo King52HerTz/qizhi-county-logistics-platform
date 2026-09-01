@@ -14,10 +14,35 @@ from app.schemas import (
     Order,
     Scenario,
 )
-from app.solver import solve_scenario
+from app.solver import solve_bidirectional_scenario, solve_scenario
 
 
 STRATEGIES = ("balanced", "distance", "cost", "fleet")
+
+
+def _solve_profile(
+    scenario: Scenario,
+    *,
+    profile: str | None,
+    time_limit_seconds: int,
+    unavailable_vehicle_ids: set[str],
+    extra_orders: list[Order],
+    strategy: str,
+    deterministic: bool = False,
+) -> OptimizeResponse:
+    solver = (
+        solve_bidirectional_scenario
+        if profile == "bidirectional-v2" or scenario.flow_profile == "bidirectional"
+        else solve_scenario
+    )
+    return solver(
+        scenario,
+        time_limit_seconds=time_limit_seconds,
+        unavailable_vehicle_ids=unavailable_vehicle_ids,
+        extra_orders=extra_orders,
+        strategy=strategy,
+        deterministic=deterministic,
+    )
 
 
 def _scenario_summary(
@@ -72,9 +97,10 @@ def orchestrate_optimization(
 ) -> OptimizeResponse:
     unavailable = unavailable_vehicle_ids or set()
     additional_orders = extra_orders or []
-    if request.profile == "standard-v1":
-        selected = solve_scenario(
+    if request.profile in {"standard-v1", "bidirectional-v2"}:
+        selected = _solve_profile(
             scenario,
+            profile=request.profile,
             time_limit_seconds=request.time_limit_seconds,
             unavailable_vehicle_ids=unavailable,
             extra_orders=additional_orders,
@@ -83,6 +109,9 @@ def orchestrate_optimization(
         )
         selection_reason = (
             "标准运营基线 v1 已锁定 balanced 策略、路网快照与确定性搜索参数；"
+            "AI 仅用于结果解释，不参与路线选择。"
+            if request.profile == "standard-v1"
+            else "双向运营场景 v2 已锁定 balanced 策略、取送货约束与确定性搜索参数；"
             "AI 仅用于结果解释，不参与路线选择。"
         )
         selected.candidate_summaries = [
@@ -146,8 +175,9 @@ def orchestrate_optimization(
     strategies = _strategy_order(preferred, request.candidate_count)
     per_candidate_seconds = max(1, request.time_limit_seconds // len(strategies))
     candidates = [
-        solve_scenario(
+        _solve_profile(
             scenario,
+            profile=request.profile,
             time_limit_seconds=per_candidate_seconds,
             unavailable_vehicle_ids=unavailable,
             extra_orders=additional_orders,

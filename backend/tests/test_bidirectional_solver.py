@@ -1,6 +1,8 @@
 from collections import defaultdict
 
 from app.data.bidirectional_scenario import get_bidirectional_scenario
+from app.optimization_orchestrator import orchestrate_optimization
+from app.schemas import OptimizeRequest
 from app.solver import solve_bidirectional_scenario
 
 
@@ -57,3 +59,21 @@ def test_bidirectional_solver_reports_missing_nodes_without_crashing() -> None:
     assert response.status == "infeasible"
     assert response.unassigned_order_ids == [scenario.orders[0].id]
     assert "不存在的取送节点" in response.explanations[0]
+
+
+def test_bidirectional_profile_uses_pickup_delivery_solver() -> None:
+    response = orchestrate_optimization(
+        get_bidirectional_scenario(),
+        OptimizeRequest(
+            profile="bidirectional-v2",
+            strategy="balanced",
+            ai_assisted=False,
+            candidate_count=1,
+            time_limit_seconds=5,
+        ),
+    )
+
+    assert response.status == "feasible"
+    assert response.solver == "ortools-pickup-delivery"
+    assert response.candidate_summaries[0].selected is True
+    assert response.ai_orchestration.used is False

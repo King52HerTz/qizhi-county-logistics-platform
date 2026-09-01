@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.data.bidirectional_scenario import BIDIRECTIONAL_SCENARIO_ID, get_bidirectional_scenario
 from app.data.qidong_reference import REFERENCE_ORDER_REQUESTS, reference_order_profile
 from app.data.scenario import get_scenario
 from app.models import (
@@ -194,6 +195,8 @@ def seed_demo_order_requests(session: Session) -> None:
 
 
 def load_scenario(session: Session, version_key: str | None = None) -> Scenario:
+    if version_key == BIDIRECTIONAL_SCENARIO_ID:
+        return get_bidirectional_scenario()
     statement = select(ScenarioVersionRecord)
     if version_key:
         statement = statement.where(ScenarioVersionRecord.version_key == version_key)

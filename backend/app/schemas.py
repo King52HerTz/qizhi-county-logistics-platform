@@ -464,7 +464,7 @@ class OptimizeOptions(BaseModel):
 
 class OptimizeRequest(BaseModel):
     scenario_id: str | None = None
-    profile: Literal["standard-v1"] | None = None
+    profile: Literal["standard-v1", "bidirectional-v2"] | None = None
     solver: Literal["ortools", "pyvrp"] = "ortools"
     time_limit_seconds: int = Field(default=5, ge=1, le=30)
     strategy: Literal["auto", "balanced", "distance", "cost", "fleet"] = "auto"
@@ -491,7 +491,7 @@ class Event(BaseModel):
 
 class ReoptimizeRequest(BaseModel):
     base_run_id: str | None = None
-    profile: Literal["standard-v1"] | None = None
+    profile: Literal["standard-v1", "bidirectional-v2"] | None = None
     event: Event
     lock_completed: bool = True
     urgent_orders: list[str] = Field(default_factory=list)

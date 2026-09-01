@@ -23,6 +23,7 @@ from app.analytics import build_demand_forecast
 from app.celery_app import celery_app
 from app.competition_service import build_competition_readiness, build_competition_report
 from app.config import get_settings
+from app.data.bidirectional_scenario import BIDIRECTIONAL_SCENARIO_ID
 from app.data.qidong_reference import build_qidong_reference_summary
 from app.db import SessionLocal, get_db, initialize_database
 from app.dispatch_service import (
@@ -3148,10 +3149,11 @@ def activate_scenario(
 
 @app.get("/api/v1/scenario")
 def scenario(
+    scenario_id: str | None = Query(default=None, max_length=64),
     _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ):
-    return load_scenario(session)
+    return load_scenario(session, scenario_id)
 
 
 @app.get(
@@ -3159,10 +3161,11 @@ def scenario(
     response_model=ScenarioSpatialStatus,
 )
 def scenario_spatial_status(
+    scenario_id: str | None = Query(default=None, max_length=64),
     _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> ScenarioSpatialStatus:
-    current = load_scenario(session)
+    current = load_scenario(session, scenario_id)
     return get_scenario_spatial_status(session, current)
 
 
@@ -3242,7 +3245,10 @@ def optimize(
     session: Session = Depends(get_db),
 ) -> OptimizeResponse:
     try:
-        current = load_scenario(session, request.scenario_id)
+        scenario_key = request.scenario_id
+        if request.profile == "bidirectional-v2" and scenario_key is None:
+            scenario_key = BIDIRECTIONAL_SCENARIO_ID
+        current = load_scenario(session, scenario_key)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     result = orchestrate_optimization(
@@ -3276,7 +3282,12 @@ def reoptimize(
                 "candidate_count": 1,
             }
         )
-    current = load_scenario(session)
+    scenario_key = (
+        BIDIRECTIONAL_SCENARIO_ID
+        if request.profile == "bidirectional-v2"
+        else None
+    )
+    current = load_scenario(session, scenario_key)
     node_map = {node.id: node for node in current.nodes}
     if request.event.type == "vehicle_breakdown" and request.event.vehicle_id:
         if request.event.vehicle_id not in {
