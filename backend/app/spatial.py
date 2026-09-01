@@ -19,6 +19,13 @@ def gcj02_to_wgs84(longitude: float, latitude: float) -> tuple[float, float]:
     return 2 * longitude - adjusted_longitude, 2 * latitude - adjusted_latitude
 
 
+def wgs84_to_gcj02(longitude: float, latitude: float) -> tuple[float, float]:
+    """Convert WGS-84 positions (for example browser GPS) to GCJ-02 display coordinates."""
+    if not _inside_china(longitude, latitude):
+        return longitude, latitude
+    return _wgs84_to_gcj02(longitude, latitude)
+
+
 def haversine_m(
     first_longitude: float,
     first_latitude: float,
