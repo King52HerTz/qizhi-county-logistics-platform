@@ -28,6 +28,10 @@ export interface Order {
   window_start: number
   window_end: number
   cold_chain: boolean
+  flow_direction?: 'upward' | 'downward'
+  cargo_category?: 'agricultural' | 'industrial'
+  origin_node_id?: string | null
+  destination_node_id?: string | null
 }
 
 export interface Scenario {
@@ -36,6 +40,7 @@ export interface Scenario {
   nodes: Node[]
   orders: Order[]
   vehicles: Vehicle[]
+  flow_profile?: 'standard' | 'bidirectional'
   spatial_snapshot_id?: string
   spatial_snapshot_at?: string
   spatial_verified_nodes: number

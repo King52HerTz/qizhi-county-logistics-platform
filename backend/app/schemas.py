@@ -6,6 +6,9 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+FlowDirection = Literal["upward", "downward"]
+CargoCategory = Literal["agricultural", "industrial"]
+
 
 class Node(BaseModel):
     id: str = Field(min_length=1, max_length=32)
@@ -32,6 +35,10 @@ class Order(BaseModel):
     cold_chain: bool = False
     priority: Literal["normal", "urgent"] = "normal"
     completed: bool = False
+    flow_direction: FlowDirection = "downward"
+    cargo_category: CargoCategory = "agricultural"
+    origin_node_id: str | None = None
+    destination_node_id: str | None = None
 
 
 class Vehicle(BaseModel):
@@ -57,6 +64,7 @@ class Scenario(BaseModel):
     nodes: list[Node]
     orders: list[Order]
     vehicles: list[Vehicle]
+    flow_profile: Literal["standard", "bidirectional"] = "standard"
     spatial_snapshot_id: str | None = None
     spatial_snapshot_at: datetime | None = None
     spatial_verified_nodes: int = 0
