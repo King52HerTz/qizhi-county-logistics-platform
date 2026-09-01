@@ -412,6 +412,9 @@ def solve_scenario(
                     arrival_minute=solution.Value(time_dimension.CumulVar(index)),
                     load_kg=solution.Value(capacity_dimension.CumulVar(index)),
                     status="depot" if node_idx == 0 else "planned",
+                    action="depot" if node_idx == 0 else "delivery",
+                    flow_direction=order.flow_direction if order else None,
+                    cargo_category=order.cargo_category if order else None,
                 )
             )
             next_index = solution.Value(routing.NextVar(index))
@@ -429,6 +432,7 @@ def solve_scenario(
                 arrival_minute=solution.Value(time_dimension.CumulVar(index)),
                 load_kg=solution.Value(capacity_dimension.CumulVar(index)),
                 status="depot",
+                action="depot",
             )
         )
         distance_km = route_distance_m / 1000

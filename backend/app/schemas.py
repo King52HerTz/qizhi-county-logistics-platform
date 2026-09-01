@@ -508,6 +508,9 @@ class RouteStop(BaseModel):
     arrival_minute: int
     load_kg: int
     status: Literal["depot", "planned", "completed"] = "planned"
+    action: Literal["depot", "pickup", "delivery"] = "delivery"
+    flow_direction: FlowDirection | None = None
+    cargo_category: CargoCategory | None = None
 
 
 class Route(BaseModel):
@@ -700,6 +703,9 @@ class DriverNavigationStop(BaseModel):
     arrival_minute: int
     load_kg: int
     status: Literal["planned", "completed"] = "planned"
+    action: Literal["pickup", "delivery"] = "delivery"
+    flow_direction: FlowDirection | None = None
+    cargo_category: CargoCategory | None = None
 
 
 class DriverAssignmentView(BaseModel):

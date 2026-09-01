@@ -321,6 +321,21 @@ def assignment_view(record: DriverAssignmentRecord) -> DriverAssignmentView:
                 if stop.get("status") == "completed"
                 else "planned"
             ),
+            action=(
+                stop.get("action")
+                if stop.get("action") in {"pickup", "delivery"}
+                else "delivery"
+            ),
+            flow_direction=(
+                stop.get("flow_direction")
+                if stop.get("flow_direction") in {"upward", "downward"}
+                else None
+            ),
+            cargo_category=(
+                stop.get("cargo_category")
+                if stop.get("cargo_category") in {"agricultural", "industrial"}
+                else None
+            ),
         )
         for sequence, stop in enumerate(
             (item for item in stops if item.get("status") != "depot"),
