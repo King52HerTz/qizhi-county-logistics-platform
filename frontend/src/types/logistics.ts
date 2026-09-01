@@ -54,6 +54,9 @@ export interface RouteStop {
   load_kg: number
   longitude: number
   latitude: number
+  action?: 'depot' | 'pickup' | 'delivery'
+  flow_direction?: 'upward' | 'downward'
+  cargo_category?: 'agricultural' | 'industrial'
 }
 
 export interface Route {
@@ -289,6 +292,10 @@ export interface OrderRequest {
   service_minutes: number
   cold_chain: boolean
   priority: 'normal' | 'urgent'
+  flow_direction: 'upward' | 'downward'
+  cargo_category: 'agricultural' | 'industrial'
+  origin_node_id?: string
+  destination_node_id?: string
   status: OrderRequestStatus
   review_note?: string
   reviewer_username?: string
@@ -576,6 +583,10 @@ export interface MasterOrderInput {
   service_minutes: number
   cold_chain: boolean
   priority: MasterPriority
+  flow_direction: 'upward' | 'downward'
+  cargo_category: 'agricultural' | 'industrial'
+  origin_node_id?: string
+  destination_node_id?: string
   status: MasterOrderStatus
 }
 
@@ -824,7 +835,7 @@ export type DriverAssignmentStatus = 'pending' | 'accepted' | 'executing' | 'com
 
 export interface DriverNavigationStop {
   sequence: number
-  order_id?: string
+  order_id?: string | null
   node_id: string
   node_name: string
   longitude: number
@@ -832,6 +843,9 @@ export interface DriverNavigationStop {
   arrival_minute: number
   load_kg: number
   status: 'planned' | 'completed'
+  action: 'pickup' | 'delivery'
+  flow_direction?: 'upward' | 'downward'
+  cargo_category?: 'agricultural' | 'industrial'
 }
 
 export interface DriverAssignmentView {

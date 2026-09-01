@@ -42,6 +42,10 @@ const form = reactive({
   service_minutes: 8,
   cold_chain: false,
   priority: 'normal' as MasterPriority,
+  flow_direction: 'downward' as 'upward' | 'downward',
+  cargo_category: 'industrial' as 'agricultural' | 'industrial',
+  origin_node_id: '',
+  destination_node_id: '',
   status: 'pending' as MasterOrderStatus,
 })
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
@@ -60,6 +64,8 @@ const statusNames: Record<MasterOrderStatus, string> = {
   cancelled: '已取消',
 }
 const priorityNames: Record<MasterPriority, string> = { normal: '普通', urgent: '紧急' }
+const flowDirectionNames = { upward: '农产品上行', downward: '工业品下行' }
+const cargoCategoryNames = { agricultural: '农产品', industrial: '工业品' }
 
 function timeToMinute(value: string) {
   const [hour, minute] = value.split(':').map(Number)
@@ -135,6 +141,10 @@ function resetForm() {
     service_minutes: 8,
     cold_chain: false,
     priority: 'normal',
+    flow_direction: 'downward',
+    cargo_category: 'industrial',
+    origin_node_id: '',
+    destination_node_id: '',
     status: 'pending',
   })
 }
@@ -169,6 +179,10 @@ function payload(): MasterOrderInput {
     service_minutes: form.service_minutes,
     cold_chain: form.cold_chain,
     priority: form.priority,
+    flow_direction: form.flow_direction,
+    cargo_category: form.cargo_category,
+    origin_node_id: form.origin_node_id || undefined,
+    destination_node_id: form.destination_node_id || undefined,
     status: form.status,
   }
 }
@@ -243,7 +257,7 @@ onMounted(() => Promise.all([load(), loadNodes()]))
       <div class="master-row master-head order"><span>订单编号</span><span>货物 / 客户</span><span>服务网点</span><span>重量</span><span>时间窗</span><span>冷链</span><span>优先级</span><span>状态</span><span>更新时间</span><span>操作</span></div>
       <div v-for="item in items" :key="item.id" class="master-row order">
         <code>{{ item.id }}</code>
-        <div class="master-main-cell"><strong>{{ item.cargo_name }}</strong><span>{{ item.customer_name }}</span></div>
+        <div class="master-main-cell"><strong>{{ item.cargo_name }}</strong><span>{{ item.customer_name }}</span><small class="order-flow-label">{{ flowDirectionNames[item.flow_direction] }} · {{ cargoCategoryNames[item.cargo_category] }}</small></div>
         <span>{{ item.node_name }}</span>
         <strong>{{ item.weight_kg.toLocaleString() }} kg</strong>
         <span>{{ minuteToTime(item.window_start) }}–{{ minuteToTime(item.window_end) }}</span>
@@ -270,6 +284,8 @@ onMounted(() => Promise.all([load(), loadNodes()]))
             <label><span>客户名称 <b>*</b></span><input v-model.trim="form.customer_name" required maxlength="120" /></label>
             <label><span>联系电话</span><input v-model.trim="form.customer_phone" maxlength="32" placeholder="选填" /></label>
             <label><span>服务网点 <b>*</b></span><select v-model="form.node_id" required><option v-for="node in nodes" :key="node.id" :value="node.id">{{ node.name }}</option></select></label>
+            <label><span>物流方向 <b>*</b></span><select v-model="form.flow_direction"><option value="upward">农产品上行</option><option value="downward">工业品下行</option></select></label>
+            <label><span>货物类别 <b>*</b></span><select v-model="form.cargo_category"><option value="agricultural">农产品</option><option value="industrial">工业品</option></select></label>
             <label class="span-2"><span>配送地址</span><textarea v-model.trim="form.delivery_address" maxlength="300" placeholder="客户或交付点详细地址" /></label>
             <label><span>重量（kg） <b>*</b></span><input v-model.number="form.weight_kg" type="number" min="1" max="100000" required /></label>
             <label><span>服务时长（分钟）</span><input v-model.number="form.service_minutes" type="number" min="0" max="240" /></label>

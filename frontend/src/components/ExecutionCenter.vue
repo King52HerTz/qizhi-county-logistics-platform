@@ -167,6 +167,10 @@ function formatArrivalMinute(minute: number) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
+function stopActionLabel(action?: 'pickup' | 'delivery') {
+  return action === 'pickup' ? '取货' : '送货'
+}
+
 function openNavigation(assignment: DriverAssignmentView) {
   const stop = assignment.next_stop
   if (!stop) {
@@ -318,12 +322,12 @@ onMounted(loadWorkspace)
       <div class="driver-task-grid">
         <article v-for="item in assignments" :key="item.id" class="driver-task" :class="item.status">
           <header><span><Truck :size="18" /></span><div><strong>{{ item.plate }}</strong><small>执行单 #{{ item.plan_id }} · 路线 {{ item.route_index + 1 }}</small></div><b>{{ statusLabel[item.status] }}</b></header>
-          <div class="task-route"><MapPin :size="17" /><p><span>下一站 · 第 {{ item.next_stop?.sequence ?? '-' }} 站</span><strong>{{ item.next_stop_name ?? '配送中心' }}</strong><small v-if="item.next_stop">预计到达 {{ formatArrivalMinute(item.next_stop.arrival_minute) }} · {{ item.next_stop.load_kg }} kg</small></p></div>
+          <div class="task-route"><MapPin :size="17" /><p><span>下一站 · 第 {{ item.next_stop?.sequence ?? '-' }} 站 · {{ stopActionLabel(item.next_stop?.action) }}</span><strong>{{ item.next_stop_name ?? '配送中心' }}</strong><small v-if="item.next_stop">预计到达 {{ formatArrivalMinute(item.next_stop.arrival_minute) }} · {{ item.next_stop.load_kg }} kg</small></p></div>
           <div v-if="item.navigation_stops.length" class="task-stops">
             <div class="task-stops-heading"><span>配送节点</span><small>{{ item.navigation_stops.length }} 站</small></div>
             <ol>
               <li v-for="stop in item.navigation_stops" :key="`${item.id}-${stop.sequence}`" :class="{ current: stop.sequence === item.next_stop?.sequence, completed: stop.status === 'completed' }">
-                <span>{{ stop.sequence }}</span><b>{{ stop.node_name }}</b>
+                <span>{{ stop.sequence }}</span><b>{{ stopActionLabel(stop.action) }} · {{ stop.node_name }}</b>
               </li>
             </ol>
           </div>

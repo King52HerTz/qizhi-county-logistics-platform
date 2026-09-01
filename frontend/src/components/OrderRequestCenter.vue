@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AlertCircle, Check, ClipboardCheck, Clock3, LoaderCircle, MapPin, Package, RefreshCw, RotateCcw, Send, ShieldCheck, Truck, X } from '@lucide/vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   cancelOrderRequest,
   createOrderRequest,
@@ -34,7 +34,12 @@ const form = reactive({
   service_minutes: 8,
   cold_chain: false,
   priority: 'normal' as 'normal' | 'urgent',
+  flow_direction: 'downward' as 'upward' | 'downward',
+  cargo_category: 'industrial' as 'agricultural' | 'industrial',
 })
+
+const flowDirectionLabels = { upward: '农产品上行', downward: '工业品下行' }
+const cargoCategoryLabels = { agricultural: '农产品', industrial: '工业品' }
 
 const statusLabels: Record<OrderRequest['status'], string> = {
   pending_review: '审核中',
@@ -80,6 +85,14 @@ function operationalLabel(status?: string) {
   return ({ pending: '待调度', planned: '已排程', completed: '已送达', cancelled: '已取消' } as Record<string, string>)[status || ''] || '待生成路线'
 }
 
+function flowLabel(item: Pick<OrderRequest, 'flow_direction' | 'cargo_category'>) {
+  return `${flowDirectionLabels[item.flow_direction]} · ${cargoCategoryLabels[item.cargo_category]}`
+}
+
+watch(() => form.flow_direction, (direction) => {
+  form.cargo_category = direction === 'upward' ? 'agricultural' : 'industrial'
+})
+
 async function load() {
   loading.value = true
   try {
@@ -120,6 +133,8 @@ async function submit() {
       service_minutes: Number(form.service_minutes),
       cold_chain: form.cold_chain,
       priority: form.priority,
+      flow_direction: form.flow_direction,
+      cargo_category: form.cargo_category,
     })
     requests.value = [created, ...requests.value]
     form.customer_name = ''
@@ -196,6 +211,10 @@ onMounted(load)
               <label><span>货物名称 <b>*</b></span><input v-model.trim="form.cargo_name" maxlength="120" required /></label>
             </div>
             <div class="form-grid two">
+              <label><span>物流方向 <b>*</b></span><select v-model="form.flow_direction"><option value="upward">农产品上行（村点 → 加工中心）</option><option value="downward">工业品下行（共配中心 → 村点）</option></select></label>
+              <label><span>货物类别 <b>*</b></span><select v-model="form.cargo_category"><option value="agricultural">农产品</option><option value="industrial">工业品</option></select></label>
+            </div>
+            <div class="form-grid two">
               <label><span>收货人 <b>*</b></span><input v-model.trim="form.customer_name" maxlength="120" placeholder="请输入收货人姓名" required /></label>
               <label><span>联系电话</span><input v-model.trim="form.customer_phone" maxlength="32" placeholder="选填" /></label>
             </div>
@@ -238,7 +257,7 @@ onMounted(load)
         <article v-for="item in filteredRequests" :key="item.id" class="request-item">
           <div class="request-item-main">
             <div class="request-code"><span :class="`status-dot ${item.status}`" /><strong>{{ item.request_code }}</strong><small>{{ formatTime(item.created_at) }}</small></div>
-            <div class="request-summary"><b>{{ item.cargo_name }} · {{ item.weight_kg }} kg</b><span><MapPin :size="14" />{{ item.node_name }} · {{ formatWindow(item.window_start, item.window_end) }} · {{ item.cold_chain ? '冷链' : '常温' }}</span></div>
+            <div class="request-summary"><b>{{ item.cargo_name }} · {{ item.weight_kg }} kg</b><span><MapPin :size="14" />{{ item.node_name }} · {{ formatWindow(item.window_start, item.window_end) }} · {{ item.cold_chain ? '冷链' : '常温' }} · {{ flowLabel(item) }}</span></div>
             <div v-if="isAdmin" class="request-customer"><span>申请人</span><b>{{ item.requester_name }}</b><span>收货人</span><b>{{ item.customer_name }}</b></div>
           </div>
           <div class="request-item-side">

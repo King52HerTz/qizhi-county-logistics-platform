@@ -178,6 +178,10 @@ export const createOrderRequest = (input: {
   service_minutes: number
   cold_chain: boolean
   priority: 'normal' | 'urgent'
+  flow_direction: 'upward' | 'downward'
+  cargo_category: 'agricultural' | 'industrial'
+  origin_node_id?: string
+  destination_node_id?: string
 }) =>
   authenticatedRequest<OrderRequest>('/order-requests', {
     method: 'POST',
@@ -349,37 +353,48 @@ export const calibrateNodeCoordinate = (id: string, input: NodeCoordinateInput) 
     { method: 'PUT', body: JSON.stringify(input) },
   )
 
-export const getScenario = () => authenticatedRequest<Scenario>('/scenario')
-export const getScenarioSpatialStatus = () =>
-  authenticatedRequest<ScenarioSpatialStatus>('/scenario/spatial-status')
+export const getScenario = (profile: 'standard-v1' | 'bidirectional-v2' = 'bidirectional-v2') =>
+  authenticatedRequest<Scenario>(
+    profile === 'bidirectional-v2'
+      ? '/scenario?scenario_id=qidong-bidirectional-v2'
+      : '/scenario',
+  )
+export const getScenarioSpatialStatus = (
+  profile: 'standard-v1' | 'bidirectional-v2' = 'bidirectional-v2',
+) =>
+  authenticatedRequest<ScenarioSpatialStatus>(
+    profile === 'bidirectional-v2'
+      ? '/scenario/spatial-status?scenario_id=qidong-bidirectional-v2'
+      : '/scenario/spatial-status',
+  )
 export const getDemandForecast = (days = 7) =>
   authenticatedRequest<DemandForecast>(`/analytics/forecast?days=${days}`)
 export const getRoutingStatus = () => authenticatedRequest<RoutingStatus>('/routing/status')
 export const getCurrentWeather = () => authenticatedRequest<CurrentWeather>('/weather/current')
-export const optimizeScenario = () =>
+export const optimizeScenario = (profile: 'standard-v1' | 'bidirectional-v2' = 'bidirectional-v2') =>
   authenticatedRequest<OptimizeResult>('/optimize', {
     method: 'POST',
     body: JSON.stringify({
-      profile: 'standard-v1',
+      profile,
       strategy: 'balanced',
       ai_assisted: true,
       candidate_count: 1,
       time_limit_seconds: 5,
     }),
   })
-export const reoptimizeScenario = () =>
+export const reoptimizeScenario = (profile: 'standard-v1' | 'bidirectional-v2' = 'bidirectional-v2') =>
   authenticatedRequest<OptimizeResult>('/events/reoptimize', {
     method: 'POST',
     body: JSON.stringify({
-      profile: 'standard-v1',
+      profile,
       event: {
         type: 'vehicle_breakdown',
         vehicle_id: 'V-COLD-01',
         occurred_at_minute: 90,
-        node_id: 'V-SHANGYI',
-        longitude: 111.842611,
-        latitude: 26.826567,
-        location_name: '尚义村',
+        node_id: profile === 'bidirectional-v2' ? 'V-007' : 'V-SHANGYI',
+        longitude: profile === 'bidirectional-v2' ? 111.937461 : 111.842611,
+        latitude: profile === 'bidirectional-v2' ? 26.776843 : 26.826567,
+        location_name: profile === 'bidirectional-v2' ? '城连圩乡永隆村服务站' : '尚义村',
       },
       lock_completed: true,
       urgent_orders: ['O-URGENT-01'],
