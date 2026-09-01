@@ -48,6 +48,14 @@ const riskCopy = computed(() => ({
 }[props.forecast.risk_level]))
 const totalWeight = computed(() =>
   props.scenario.orders.reduce((sum, order) => sum + order.weight_kg, 0) / 1000)
+const directionalLoad = computed(() => {
+  const upward = props.scenario.orders.filter(order => order.flow_direction === 'upward')
+  const downward = props.scenario.orders.filter(order => order.flow_direction !== 'upward')
+  return {
+    upward: { count: upward.length, tons: upward.reduce((sum, order) => sum + order.weight_kg, 0) / 1000 },
+    downward: { count: downward.length, tons: downward.reduce((sum, order) => sum + order.weight_kg, 0) / 1000 },
+  }
+})
 const saving = computed(() =>
   Math.max(0, Math.round(
     props.result.baseline_metrics.estimated_cost_cny - props.result.metrics.estimated_cost_cny,
@@ -240,7 +248,7 @@ onBeforeUnmount(() => {
 
       <section class="cockpit-panel map-panel">
         <div class="panel-heading map-heading">
-          <div><h2>县域配送路网态势</h2><p>{{ result.routes.length }} 条优化线路 · {{ result.routing.coordinate_count }} 个矩阵坐标</p></div>
+          <div><h2>县域配送路网态势</h2><p>{{ scenario.flow_profile === 'bidirectional' ? '农产品上行 · 工业品下行' : '县域配送线路' }} · {{ result.routes.length }} 条优化线路 · {{ result.routing.coordinate_count }} 个矩阵坐标</p></div>
           <span class="live-state"><i /> 引擎在线</span>
         </div>
           <ProfessionalCountyMap :scenario="scenario" :result="result" compact />
@@ -299,6 +307,10 @@ onBeforeUnmount(() => {
             <b>{{ (referenceSummary.demo_order_weight_kg / 1000).toFixed(1) }} 吨 · {{ referenceSummary.demo_order_count }} 单</b>
             <em>共配协同 {{ referenceSummary.co_delivery_stations }} 点 · 村级覆盖 {{ referenceSummary.village_coverage_percent.toFixed(1) }}%</em>
           </div>
+          <div class="directional-load">
+            <div><span>农产品上行</span><b>{{ directionalLoad.upward.tons.toFixed(1) }} 吨</b><em>{{ directionalLoad.upward.count }} 单 · 村点 → 加工中心</em></div>
+            <div><span>工业品下行</span><b>{{ directionalLoad.downward.tons.toFixed(1) }} 吨</b><em>{{ directionalLoad.downward.count }} 单 · 共配中心 → 村点</em></div>
+          </div>
           <p class="reference-candidates">候选站点 {{ referenceSummary.candidates.length }} 个 · 田间冷库 {{ referenceSummary.field_cold_stores }} 座 · 公路 {{ referenceSummary.road_total_km.toFixed(1) }} km · 优先节点：{{ referenceCandidates.map(item => item.town_name).join(' · ') }}</p>
         </section>
 
@@ -324,4 +336,5 @@ onBeforeUnmount(() => {
 @media(max-width:1250px){.cockpit-main{grid-template-columns:240px minmax(430px,1fr) 280px}.metric-rail>div,.bottom-rail>div{padding-left:12px;padding-right:12px}}
 @media(max-width:1100px){.cockpit-main{grid-template-columns:minmax(0,1fr);height:auto;min-height:0}.analytics-rail{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.forecast-panel,.ranking-panel{height:270px}.forecast-chart,.ranking-chart{height:215px}.map-panel{height:520px;min-height:520px}.decision-rail{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:none}.dispatch-button{grid-column:1/-1}}
 @media(max-width:760px){.metric-rail,.bottom-rail{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-rail>div,.bottom-rail>div{padding:12px 10px;border-bottom:1px solid #e8ece9}.metric-rail>div:nth-child(2n),.bottom-rail>div:nth-child(2n){border-right:0}.metric-rail strong{font-size:21px}.metric-rail .amber-copy{font-size:16px}.metric-icon{width:34px;height:34px}.analytics-rail,.decision-rail{grid-template-columns:minmax(0,1fr)}.map-panel{height:500px}.bottom-rail strong{font-size:16px}.panel-heading{padding-left:11px;padding-right:11px}}
+.directional-load{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:7px 12px 0}.directional-load>div{padding:7px 8px;border-radius:7px;background:#f7faf8;border:1px solid #e4eee7;min-width:0}.directional-load span,.directional-load b,.directional-load em{display:block}.directional-load span{font-size:8px;color:#718178}.directional-load b{font-size:12px;color:#1b6f46;margin-top:3px}.directional-load em{font-size:8px;color:#8a978f;font-style:normal;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
