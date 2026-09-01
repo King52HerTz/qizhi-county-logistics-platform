@@ -598,7 +598,11 @@ def test_reproducible_algorithm_experiment_and_report(client: TestClient) -> Non
     assert "轮询启发式" in report.text
 
 
-def test_dispatch_approval_driver_execution_and_report(client: TestClient) -> None:
+def test_dispatch_approval_driver_execution_and_report(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "routing_provider", "haversine")
     admin_login = client.post(
         "/api/v1/auth/login",
         json={"username": "admin", "password": "QizhiDemo2026!"},
@@ -667,11 +671,30 @@ def test_dispatch_approval_driver_execution_and_report(client: TestClient) -> No
         assert assignment["next_stop"]["longitude"]
         assert assignment["next_stop"]["latitude"]
         assignment_id = assignment["id"]
-        assert client.post(
+        accepted = client.post(
             f"/api/v1/driver/assignments/{assignment_id}/accept",
             headers=driver_headers,
             json={},
-        ).status_code == 200
+        )
+        assert accepted.status_code == 200
+        navigation = client.post(
+            f"/api/v1/driver/assignments/{assignment_id}/navigation",
+            headers=driver_headers,
+            json={
+                "origin_longitude": 112.05,
+                "origin_latitude": 26.77,
+                "origin_name": "车辆当前位置",
+                "origin_source": "gps",
+                "origin_coordinate_system": "wgs84",
+            },
+        )
+        assert navigation.status_code == 200
+        navigation_payload = navigation.json()
+        assert navigation_payload["origin_source"] == "gps"
+        assert navigation_payload["routing_source"] == "haversine"
+        assert navigation_payload["fallback_used"] is True
+        assert navigation_payload["geometry"]
+        assert navigation_payload["destination"]["name"] == assignment["next_stop"]["node_name"]
         assert client.post(
             f"/api/v1/driver/assignments/{assignment_id}/start",
             headers=driver_headers,
