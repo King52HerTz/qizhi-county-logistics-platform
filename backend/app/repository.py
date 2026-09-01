@@ -204,6 +204,20 @@ def seed_demo_order_requests(session: Session) -> None:
 
 def load_scenario(session: Session, version_key: str | None = None) -> Scenario:
     if version_key == BIDIRECTIONAL_SCENARIO_ID:
+        active = session.scalar(
+            select(ScenarioVersionRecord)
+            .where(ScenarioVersionRecord.status == "active")
+            .order_by(ScenarioVersionRecord.created_at.desc())
+        )
+        if active is not None and active.version_key not in {
+            "qidong-real-001",
+            BIDIRECTIONAL_SCENARIO_ID,
+        }:
+            # A published master-data version must remain visible after a user
+            # request is approved. Mark it as bidirectional for the v2 solver
+            # without mutating the persisted governance payload.
+            published = Scenario.model_validate(active.payload)
+            return published.model_copy(update={"flow_profile": "bidirectional"})
         return get_bidirectional_scenario()
     statement = select(ScenarioVersionRecord)
     if version_key:
