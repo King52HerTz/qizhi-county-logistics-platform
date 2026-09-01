@@ -70,6 +70,7 @@ from app.master_data_service import (
     preview_order_import,
     quality_report,
 )
+from app.navigation_service import NavigationRouteError, build_assignment_navigation
 from app.repository import (
     activate_scenario_version,
     create_scenario_version,
@@ -106,6 +107,8 @@ from app.schemas import (
     DispatchPlanView,
     DispatchReviewRequest,
     DriverAssignmentList,
+    DriverNavigationRequest,
+    DriverNavigationRouteView,
     ExperimentCreate,
     ExperimentList,
     ExperimentView,
@@ -3755,6 +3758,31 @@ def driver_assignments(
     return DriverAssignmentList(
         items=[assignment_view(item) for item in list_driver_assignments(session, user)]
     )
+
+
+@app.post(
+    "/api/v1/driver/assignments/{assignment_id}/navigation",
+    response_model=DriverNavigationRouteView,
+)
+def driver_assignment_navigation(
+    assignment_id: int,
+    request: DriverNavigationRequest,
+    user: UserRecord = Depends(driver_user),
+    session: Session = Depends(get_db),
+) -> DriverNavigationRouteView:
+    assignment = session.scalar(
+        select(DriverAssignmentRecord).where(
+            DriverAssignmentRecord.id == assignment_id
+        )
+    )
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="驾驶员任务不存在")
+    if user.role == "driver" and assignment.assigned_driver_id != user.id:
+        raise HTTPException(status_code=403, detail="不能查看其他驾驶员的导航路线")
+    try:
+        return build_assignment_navigation(assignment, request)
+    except NavigationRouteError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _assignment_action(

@@ -720,6 +720,55 @@ class DriverNavigationStop(BaseModel):
     cargo_category: CargoCategory | None = None
 
 
+class DriverNavigationRequest(BaseModel):
+    """Optional device location used as the start of a next-stop route."""
+
+    origin_longitude: float | None = Field(default=None, ge=-180, le=180)
+    origin_latitude: float | None = Field(default=None, ge=-90, le=90)
+    origin_name: str | None = Field(default=None, max_length=200)
+    origin_source: Literal["gps", "planned"] = "planned"
+    origin_coordinate_system: Literal["wgs84", "gcj02"] = "gcj02"
+
+    @model_validator(mode="after")
+    def validate_origin_pair(self) -> "DriverNavigationRequest":
+        if (self.origin_longitude is None) != (self.origin_latitude is None):
+            raise ValueError("导航起点经度与纬度必须同时提供")
+        return self
+
+
+class NavigationPosition(BaseModel):
+    name: str
+    longitude: float
+    latitude: float
+    coordinate_system: Literal["gcj02"] = "gcj02"
+
+
+class NavigationStep(BaseModel):
+    sequence: int
+    instruction: str
+    distance_m: float
+    duration_seconds: int
+    road_name: str | None = None
+    maneuver: str | None = None
+
+
+class DriverNavigationRouteView(BaseModel):
+    assignment_id: int
+    route_index: int
+    stop_sequence: int
+    origin_source: Literal["gps", "planned"]
+    origin: NavigationPosition
+    destination: NavigationPosition
+    distance_km: float
+    duration_minutes: int
+    routing_source: Literal["osrm", "haversine"]
+    fallback_used: bool = False
+    fallback_reason: str | None = None
+    geometry: list[tuple[float, float]]
+    steps: list[NavigationStep]
+    generated_at: datetime
+
+
 class DriverAssignmentView(BaseModel):
     id: int
     plan_id: int
