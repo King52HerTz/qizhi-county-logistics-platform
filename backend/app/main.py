@@ -463,6 +463,10 @@ def _master_order_view(record: OrderRecord) -> MasterOrderView:
         service_minutes=record.service_minutes,
         cold_chain=record.cold_chain,
         priority=record.priority,
+        flow_direction=record.flow_direction,
+        cargo_category=record.cargo_category,
+        origin_node_id=record.origin_node_id,
+        destination_node_id=record.destination_node_id,
         status=record.status,
         created_at=record.created_at,
         updated_at=record.updated_at,
@@ -488,6 +492,10 @@ def _order_request_view(record: OrderRequestRecord) -> OrderRequestView:
         service_minutes=record.service_minutes,
         cold_chain=record.cold_chain,
         priority=record.priority,
+        flow_direction=record.flow_direction,
+        cargo_category=record.cargo_category,
+        origin_node_id=record.origin_node_id,
+        destination_node_id=record.destination_node_id,
         status=record.status,
         review_note=record.review_note,
         reviewer_username=record.reviewer.username if record.reviewer else None,
@@ -585,6 +593,53 @@ def _require_active_node(session: Session, node_id: str) -> NodeRecord:
     if not node.is_active:
         raise HTTPException(status_code=422, detail="所选服务网点已停用，不能承接订单")
     return node
+
+
+def _resolve_order_flow_nodes(
+    session: Session,
+    *,
+    node_id: str,
+    flow_direction: str,
+    origin_node_id: str | None,
+    destination_node_id: str | None,
+) -> tuple[str, str]:
+    """Resolve and validate the two endpoints used by pickup-delivery routing."""
+    _require_active_node(session, node_id)
+    if flow_direction == "upward":
+        origin_id = origin_node_id or node_id
+        if destination_node_id:
+            destination_id = destination_node_id
+        else:
+            processor = session.scalar(
+                select(NodeRecord)
+                .where(
+                    NodeRecord.kind == "processor",
+                    NodeRecord.is_active.is_(True),
+                )
+                .order_by(NodeRecord.id)
+            )
+            if processor is None:
+                raise HTTPException(status_code=422, detail="当前没有启用的加工中心节点")
+            destination_id = processor.id
+    else:
+        destination_id = destination_node_id or node_id
+        if origin_node_id:
+            origin_id = origin_node_id
+        else:
+            depot = session.scalar(
+                select(NodeRecord)
+                .where(
+                    NodeRecord.kind == "depot",
+                    NodeRecord.is_active.is_(True),
+                )
+                .order_by(NodeRecord.id)
+            )
+            if depot is None:
+                raise HTTPException(status_code=422, detail="当前没有启用的配送中心节点")
+            origin_id = depot.id
+    _require_active_node(session, origin_id)
+    _require_active_node(session, destination_id)
+    return origin_id, destination_id
 
 
 def _ensure_not_last_admin(
@@ -1398,12 +1453,23 @@ def create_order_request(
     actor: UserRecord = Depends(customer_user),
     session: Session = Depends(get_db),
 ) -> OrderRequestView:
-    _require_active_node(session, payload.node_id)
+    origin_node_id, destination_node_id = _resolve_order_flow_nodes(
+        session,
+        node_id=payload.node_id,
+        flow_direction=payload.flow_direction,
+        origin_node_id=payload.origin_node_id,
+        destination_node_id=payload.destination_node_id,
+    )
     request_code = f"UR-{datetime.now(timezone.utc):%Y%m%d}-{uuid4().hex[:8].upper()}"
+    values = payload.model_dump()
+    values.update(
+        origin_node_id=origin_node_id,
+        destination_node_id=destination_node_id,
+    )
     record = OrderRequestRecord(
         request_code=request_code,
         requester_id=actor.id,
-        **payload.model_dump(),
+        **values,
     )
     session.add(record)
     session.flush()
@@ -1494,6 +1560,13 @@ def _approve_order_request(
     if record.operational_order_id:
         raise HTTPException(status_code=409, detail="该订单申请已经纳入运营订单")
     _require_active_node(session, record.node_id)
+    origin_node_id, destination_node_id = _resolve_order_flow_nodes(
+        session,
+        node_id=record.node_id,
+        flow_direction=record.flow_direction,
+        origin_node_id=record.origin_node_id,
+        destination_node_id=record.destination_node_id,
+    )
     operational_order_id = f"ORD-{record.request_code.removeprefix('UR-')}"
     if session.get(OrderRecord, operational_order_id):
         raise HTTPException(status_code=409, detail="运营订单编号冲突，请联系管理员")
@@ -1507,6 +1580,10 @@ def _approve_order_request(
             service_minutes=record.service_minutes,
             cold_chain=record.cold_chain,
             priority=record.priority,
+            flow_direction=record.flow_direction,
+            cargo_category=record.cargo_category,
+            origin_node_id=origin_node_id,
+            destination_node_id=destination_node_id,
             status="pending",
             cargo_name=record.cargo_name,
             customer_name=record.customer_name,
@@ -2065,9 +2142,15 @@ def create_master_order(
 ) -> MasterOrderView:
     if session.get(OrderRecord, payload.id):
         raise HTTPException(status_code=409, detail="订单编号已存在")
-    _require_active_node(session, payload.node_id)
     values = payload.model_dump()
     order_id = values.pop("id")
+    values["origin_node_id"], values["destination_node_id"] = _resolve_order_flow_nodes(
+        session,
+        node_id=payload.node_id,
+        flow_direction=payload.flow_direction,
+        origin_node_id=payload.origin_node_id,
+        destination_node_id=payload.destination_node_id,
+    )
     record = OrderRecord(id=order_id, **values)
     session.add(record)
     _audit(
@@ -2096,10 +2179,21 @@ def update_master_order(
     record = session.get(OrderRecord, order_id)
     if record is None:
         raise HTTPException(status_code=404, detail="订单不存在")
-    _require_active_node(session, payload.node_id)
+    origin_node_id, destination_node_id = _resolve_order_flow_nodes(
+        session,
+        node_id=payload.node_id,
+        flow_direction=payload.flow_direction,
+        origin_node_id=payload.origin_node_id,
+        destination_node_id=payload.destination_node_id,
+    )
     if record.status == "completed" and payload.status != "completed":
         raise HTTPException(status_code=409, detail="已完成订单不能回退状态")
-    for field, value in payload.model_dump().items():
+    values = payload.model_dump()
+    values.update(
+        origin_node_id=origin_node_id,
+        destination_node_id=destination_node_id,
+    )
+    for field, value in values.items():
         setattr(record, field, value)
     _audit(
         session,

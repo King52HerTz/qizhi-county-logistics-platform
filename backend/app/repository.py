@@ -90,6 +90,10 @@ def seed_demo_data(session: Session) -> None:
                 service_minutes=order.service_minutes,
                 cold_chain=order.cold_chain,
                 priority=order.priority,
+                flow_direction=order.flow_direction,
+                cargo_category=order.cargo_category,
+                origin_node_id=order.origin_node_id,
+                destination_node_id=order.destination_node_id,
                 status="completed" if order.completed else "pending",
                 cargo_name=profile.get("cargo_name", "农产品"),
                 customer_name=profile.get("customer_name", "未登记客户"),
@@ -188,6 +192,10 @@ def seed_demo_order_requests(session: Session) -> None:
                 service_minutes=int(item["service_minutes"]),
                 cold_chain=bool(item["cold_chain"]),
                 priority=str(item["priority"]),
+                flow_direction=str(item.get("flow_direction", "downward")),
+                cargo_category=str(item.get("cargo_category", "agricultural")),
+                origin_node_id=item.get("origin_node_id"),
+                destination_node_id=item.get("destination_node_id"),
                 status="pending_review",
             )
         )

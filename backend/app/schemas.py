@@ -82,6 +82,10 @@ class MasterOrderInput(BaseModel):
     service_minutes: int = Field(default=8, ge=0, le=240)
     cold_chain: bool = False
     priority: Literal["normal", "urgent"] = "normal"
+    flow_direction: FlowDirection = "downward"
+    cargo_category: CargoCategory = "agricultural"
+    origin_node_id: str | None = Field(default=None, min_length=1, max_length=32)
+    destination_node_id: str | None = Field(default=None, min_length=1, max_length=32)
     status: Literal["pending", "planned", "completed", "cancelled"] = "pending"
 
     @model_validator(mode="after")
@@ -128,6 +132,10 @@ class OrderRequestCreate(BaseModel):
     service_minutes: int = Field(default=8, ge=0, le=240)
     cold_chain: bool = False
     priority: Literal["normal", "urgent"] = "normal"
+    flow_direction: FlowDirection = "downward"
+    cargo_category: CargoCategory = "agricultural"
+    origin_node_id: str | None = Field(default=None, min_length=1, max_length=32)
+    destination_node_id: str | None = Field(default=None, min_length=1, max_length=32)
 
     @model_validator(mode="after")
     def validate_time_window(self) -> "OrderRequestCreate":
@@ -169,6 +177,10 @@ class OrderRequestView(BaseModel):
     service_minutes: int
     cold_chain: bool
     priority: Literal["normal", "urgent"]
+    flow_direction: FlowDirection
+    cargo_category: CargoCategory
+    origin_node_id: str | None
+    destination_node_id: str | None
     status: OrderRequestStatus
     review_note: str | None
     reviewer_username: str | None

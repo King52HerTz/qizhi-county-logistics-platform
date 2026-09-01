@@ -549,6 +549,10 @@ def build_scenario_from_master(session: Session, *, name: str) -> tuple[Scenario
                 service_minutes=record.service_minutes,
                 cold_chain=record.cold_chain,
                 priority=record.priority,
+                flow_direction=record.flow_direction,
+                cargo_category=record.cargo_category,
+                origin_node_id=record.origin_node_id,
+                destination_node_id=record.destination_node_id,
                 completed=record.status == "completed",
             )
             for record in orders

@@ -195,6 +195,14 @@ class OrderRecord(Base):
     service_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     cold_chain: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
+    flow_direction: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="downward"
+    )
+    cargo_category: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="agricultural"
+    )
+    origin_node_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    destination_node_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     cargo_name: Mapped[str] = mapped_column(Text, nullable=False, default="农产品")
     customer_name: Mapped[str] = mapped_column(Text, nullable=False, default="未登记客户")
@@ -211,6 +219,14 @@ class OrderRecord(Base):
         CheckConstraint("weight_kg > 0", name="orders_weight_positive"),
         CheckConstraint("window_end > window_start", name="orders_window_check"),
         CheckConstraint("priority in ('normal','urgent')", name="orders_priority_check"),
+        CheckConstraint(
+            "flow_direction in ('upward','downward')",
+            name="orders_flow_direction_check",
+        ),
+        CheckConstraint(
+            "cargo_category in ('agricultural','industrial')",
+            name="orders_cargo_category_check",
+        ),
         CheckConstraint("status in ('pending','planned','completed','cancelled')", name="orders_status_check"),
         Index("orders_node_id_idx", "node_id"),
         Index("orders_status_created_idx", "status", "created_at"),
@@ -242,6 +258,14 @@ class OrderRequestRecord(Base):
     service_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     cold_chain: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
+    flow_direction: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="downward"
+    )
+    cargo_category: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="agricultural"
+    )
+    origin_node_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    destination_node_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending_review")
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(
@@ -268,6 +292,14 @@ class OrderRequestRecord(Base):
         CheckConstraint("window_end > window_start", name="order_requests_window_check"),
         CheckConstraint("service_minutes >= 0", name="order_requests_service_nonnegative"),
         CheckConstraint("priority in ('normal','urgent')", name="order_requests_priority_check"),
+        CheckConstraint(
+            "flow_direction in ('upward','downward')",
+            name="order_requests_flow_direction_check",
+        ),
+        CheckConstraint(
+            "cargo_category in ('agricultural','industrial')",
+            name="order_requests_cargo_category_check",
+        ),
         CheckConstraint(
             "status in ('pending_review','needs_info','rejected','converted','cancelled')",
             name="order_requests_status_check",
