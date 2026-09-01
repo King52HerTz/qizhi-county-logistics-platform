@@ -116,6 +116,12 @@ def test_qidong_reference_summary_is_deterministic_and_flags_coordinates(
     assert payload["service_circle_minutes"] == 30
     assert payload["township_count"] == 24
     assert payload["reference_demand_tons"] == pytest.approx(5556.5)
+    assert payload["bidirectional_dataset_version"] == "qidong-bidirectional-2024-v1"
+    assert payload["upward_reference_tons"] == pytest.approx(685000)
+    assert payload["downward_reference_tons"] == pytest.approx(523000)
+    assert len(payload["upward_monthly_tons"]) == 12
+    assert len(payload["downward_monthly_tons"]) == 12
+    assert len(payload["directional_demand_summary"]) == 24
     assert len(payload["ahp_weights"]) == 6
     assert sum(item["weight"] for item in payload["ahp_weights"]) == pytest.approx(1.0)
     assert len(payload["candidates"]) == 15

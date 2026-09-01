@@ -13,6 +13,13 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 
+from app.data.bidirectional_reference import (
+    BIDIRECTIONAL_DATASET_VERSION,
+    DOWNWARD_MONTHLY_TONS,
+    UPWARD_MONTHLY_TONS,
+    annual_total,
+    township_summary,
+)
 from app.schemas import Order, Scenario
 from app.spatial import inside_qidong_bounds
 
@@ -393,6 +400,12 @@ def build_qidong_reference_summary(scenario: Scenario) -> dict[str, object]:
         "road_density_km_per_sq_km": ROAD_DENSITY_KM_PER_SQ_KM,
         "demand_unit": "吨",
         "reference_demand_tons": round(total_demand, 1),
+        "bidirectional_dataset_version": BIDIRECTIONAL_DATASET_VERSION,
+        "upward_reference_tons": annual_total("upward"),
+        "downward_reference_tons": annual_total("downward"),
+        "upward_monthly_tons": list(UPWARD_MONTHLY_TONS),
+        "downward_monthly_tons": list(DOWNWARD_MONTHLY_TONS),
+        "directional_demand_summary": township_summary(),
         "demo_load_ratio": DEMO_LOAD_RATIO,
         "demo_order_count": len(scenario.orders),
         "demo_order_weight_kg": sum(order.weight_kg for order in scenario.orders),
@@ -416,5 +429,6 @@ def build_qidong_reference_summary(scenario: Scenario) -> dict[str, object]:
             "站点表中的可疑经纬度序列未直接导入地图或路网矩阵。",
             f"运营演示订单按资料汇总的 {DEMO_LOAD_PERCENT:.2f}% 归一化为当日载荷（{sum(order.weight_kg for order in scenario.orders)} kg），用于稳定求解，不代表原始期间总量。",
             "24 个乡镇需求通过显式映射汇总到稳定路线节点；坐标仍以已校准场景节点为准。",
+            "双向事实层来自2024年乡镇/月度汇总与村级明细对账：农产品上行685000吨、工业品下行523000吨。",
         ],
     }

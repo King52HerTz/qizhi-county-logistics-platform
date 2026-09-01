@@ -430,6 +430,13 @@ export interface ReferenceDemandPoint {
   share_percent: number
 }
 
+export interface ReferenceDirectionalDemandPoint {
+  town_name: string
+  upward_tons: number
+  downward_tons: number
+  combined_tons: number
+}
+
 export interface ReferenceCandidate {
   rank: number
   town_name: string
@@ -476,6 +483,12 @@ export interface QidongReferenceSummary {
   road_density_km_per_sq_km: number
   demand_unit: string
   reference_demand_tons: number
+  bidirectional_dataset_version?: string
+  upward_reference_tons?: number
+  downward_reference_tons?: number
+  upward_monthly_tons?: number[]
+  downward_monthly_tons?: number[]
+  directional_demand_summary?: ReferenceDirectionalDemandPoint[]
   demo_load_ratio: number
   demo_order_count: number
   demo_order_weight_kg: number

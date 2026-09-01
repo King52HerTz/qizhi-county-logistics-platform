@@ -325,6 +325,13 @@ class ReferenceDemandPoint(BaseModel):
     share_percent: float = Field(ge=0, le=100)
 
 
+class ReferenceDirectionalDemandPoint(BaseModel):
+    town_name: str
+    upward_tons: float = Field(ge=0)
+    downward_tons: float = Field(ge=0)
+    combined_tons: float = Field(ge=0)
+
+
 class ReferenceCandidateView(BaseModel):
     rank: int = Field(ge=1)
     town_name: str
@@ -371,6 +378,12 @@ class QidongReferenceSummary(BaseModel):
     road_density_km_per_sq_km: float = Field(ge=0)
     demand_unit: str
     reference_demand_tons: float = Field(ge=0)
+    bidirectional_dataset_version: str | None = None
+    upward_reference_tons: float = Field(default=0, ge=0)
+    downward_reference_tons: float = Field(default=0, ge=0)
+    upward_monthly_tons: list[float] = []
+    downward_monthly_tons: list[float] = []
+    directional_demand_summary: list[ReferenceDirectionalDemandPoint] = []
     demo_load_ratio: float = Field(gt=0, le=1)
     demo_order_count: int = Field(ge=0)
     demo_order_weight_kg: int = Field(ge=0)
