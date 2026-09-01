@@ -3268,17 +3268,32 @@ def dashboard(
     _: UserRecord = Depends(operations_reader),
     session: Session = Depends(get_db),
 ) -> dict:
-    current = load_scenario(session)
+    current = load_scenario(session, BIDIRECTIONAL_SCENARIO_ID)
+    upward_orders = [order for order in current.orders if order.flow_direction == "upward"]
+    downward_orders = [order for order in current.orders if order.flow_direction != "upward"]
     return {
         "scenario_id": current.id,
         "orders": {
-            "total": 128,
+            "total": len(current.orders),
             "demo_tasks": len(current.orders),
             "cold_chain": sum(order.cold_chain for order in current.orders),
             "urgent": sum(order.priority == "urgent" for order in current.orders),
+            "upward": {
+                "count": len(upward_orders),
+                "weight_kg": sum(order.weight_kg for order in upward_orders),
+            },
+            "downward": {
+                "count": len(downward_orders),
+                "weight_kg": sum(order.weight_kg for order in downward_orders),
+            },
         },
-        "vehicles": {"available": 12, "demo_vehicles": len(current.vehicles), "cold_chain": 4},
-        "data_note": "内置基准数据",
+        "vehicles": {
+            "available": sum(vehicle.available for vehicle in current.vehicles),
+            "demo_vehicles": len(current.vehicles),
+            "cold_chain": sum(vehicle.cold_chain for vehicle in current.vehicles),
+        },
+        "flow_profile": current.flow_profile,
+        "data_note": "祁东县双向运营基准数据",
     }
 
 
