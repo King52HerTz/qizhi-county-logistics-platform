@@ -53,6 +53,30 @@ def _is_depot(stop: dict[str, Any]) -> bool:
     return stop.get("status") == "depot" or stop.get("action") == "depot"
 
 
+def _depot_node_ids(stops: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(stop.get("node_id"))
+        for stop in stops
+        if _is_depot(stop) and stop.get("node_id")
+    }
+
+
+def route_navigation_stops(stops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return physical route stops, excluding depot loading events.
+
+    Bidirectional routes contain order-level pickup events at the depot before
+    the first rural service point. Those events are already handled during
+    loading and must not become a zero-distance navigation destination.
+    """
+    depot_node_ids = _depot_node_ids(stops)
+    return [
+        stop
+        for stop in stops
+        if not _is_depot(stop)
+        and str(stop.get("node_id") or "") not in depot_node_ids
+    ]
+
+
 def _stop_position(stop: dict[str, Any]) -> NavigationPosition:
     node_id = str(stop.get("node_id") or "")
     node_name = str(stop.get("node_name") or node_id or "路线节点")
@@ -88,17 +112,17 @@ def _origin_from_request(
 
 
 def _planned_origin(
-    stops: list[dict[str, Any]],
+    route_stops: list[dict[str, Any]],
+    navigation_stops: list[dict[str, Any]],
     target_index: int,
 ) -> NavigationPosition:
-    non_depot = [stop for stop in stops if not _is_depot(stop)]
-    if target_index > 0 and target_index - 1 < len(non_depot):
-        return _stop_position(non_depot[target_index - 1])
-    depot = next((stop for stop in stops if _is_depot(stop)), None)
+    if target_index > 0 and target_index - 1 < len(navigation_stops):
+        return _stop_position(navigation_stops[target_index - 1])
+    depot = next((stop for stop in route_stops if _is_depot(stop)), None)
     if depot is not None:
         return _stop_position(depot)
-    if non_depot:
-        return _stop_position(non_depot[0])
+    if navigation_stops:
+        return _stop_position(navigation_stops[0])
     raise NavigationRouteError("当前任务没有可用路线起点")
 
 
@@ -271,11 +295,12 @@ def build_assignment_navigation(
 ) -> DriverNavigationRouteView:
     if assignment.status not in {"accepted", "executing"}:
         raise NavigationRouteError("请先接收并开始执行车辆任务")
-    stops = [
+    route_stops = [
         stop
         for stop in assignment.route_payload.get("stops", [])
-        if isinstance(stop, dict) and not _is_depot(stop)
+        if isinstance(stop, dict)
     ]
+    stops = route_navigation_stops(route_stops)
     target_index = next(
         (index for index, stop in enumerate(stops) if stop.get("status") != "completed"),
         None,
@@ -287,11 +312,8 @@ def build_assignment_navigation(
     requested_origin = _origin_from_request(request)
     if requested_origin is None:
         origin = _planned_origin(
-            [
-                stop
-                for stop in assignment.route_payload.get("stops", [])
-                if isinstance(stop, dict)
-            ],
+            route_stops,
+            stops,
             target_index,
         )
         origin_source = "planned"

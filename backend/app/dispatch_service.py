@@ -14,6 +14,7 @@ from app.models import (
     OrderRecord,
     UserRecord,
 )
+from app.navigation_service import route_navigation_stops
 from app.schemas import (
     DispatchPlanView,
     DriverAssignmentView,
@@ -305,7 +306,10 @@ def advance_assignment(
 
 def assignment_view(record: DriverAssignmentRecord) -> DriverAssignmentView:
     route = record.route_payload
-    stops = route.get("stops", [])
+    route_stops = [
+        stop for stop in route.get("stops", []) if isinstance(stop, dict)
+    ]
+    stops = route_navigation_stops(route_stops)
     navigation_stops = [
         DriverNavigationStop(
             sequence=sequence,
@@ -357,7 +361,7 @@ def assignment_view(record: DriverAssignmentRecord) -> DriverAssignmentView:
         distance_km=float(route.get("distance_km", 0)),
         duration_minutes=int(route.get("duration_minutes", 0)),
         load_kg=int(route.get("load_kg", 0)),
-        stop_count=max(0, len(stops) - 2),
+        stop_count=max(0, len(route_stops) - 2),
         next_stop_name=next_stop.node_name if next_stop else None,
         next_stop=next_stop,
         navigation_stops=navigation_stops,

@@ -1,4 +1,7 @@
+from datetime import datetime, timezone
+
 from app.models import DriverAssignmentRecord
+from app.dispatch_service import assignment_view
 from app.navigation_service import NavigationRouteError, build_assignment_navigation
 from app.schemas import DriverNavigationRequest
 
@@ -6,10 +9,12 @@ from app.schemas import DriverNavigationRequest
 def _assignment(*, status: str = "accepted") -> DriverAssignmentRecord:
     return DriverAssignmentRecord(
         id=21,
+        plan_id=1,
         route_index=2,
         vehicle_id="V-NORM-01",
         plate="湘D·B5612",
         status=status,
+        updated_at=datetime.now(timezone.utc),
         route_payload={
             "stops": [
                 {
@@ -134,6 +139,37 @@ def test_navigation_falls_back_to_planned_origin_when_osrm_unavailable(monkeypat
     assert result.fallback_used is True
     assert "network unavailable" in (result.fallback_reason or "")
     assert result.geometry[0] == (112.058674, 26.769788)
+
+
+def test_navigation_skips_depot_loading_events(monkeypatch) -> None:
+    from app.config import get_settings
+
+    assignment = _assignment()
+    assignment.route_payload["stops"].insert(
+        1,
+        {
+            "order_id": "DOWN-002",
+            "node_id": "D-01",
+            "node_name": "祁东县县域共配中心",
+            "longitude": 112.058674,
+            "latitude": 26.769788,
+            "status": "planned",
+            "action": "pickup",
+        },
+    )
+    view = assignment_view(assignment)
+    assert view.next_stop is not None
+    assert view.next_stop.node_id == "V-001"
+    assert view.next_stop.sequence == 1
+
+    monkeypatch.setattr(get_settings(), "routing_provider", "haversine")
+    result = build_assignment_navigation(
+        assignment,
+        DriverNavigationRequest(),
+    )
+    assert result.origin.name == "祁东县县域共配中心"
+    assert result.destination.name == "砖塘镇石山堰村服务站"
+    assert result.distance_km > 0
 
 
 def test_navigation_rejects_pending_assignment() -> None:
