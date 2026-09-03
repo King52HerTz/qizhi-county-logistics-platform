@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     routing_provider: str = "haversine"
     osrm_base_url: str = "https://router.project-osrm.org"
     osrm_profile: str = "driving"
-    osrm_timeout_seconds: float = 4.0
+    # The public OSRM instance can take several seconds to establish TLS and
+    # calculate a 60+ point county matrix on the first request after restart.
+    # Keep enough headroom for the stable demo while retaining the fallback.
+    osrm_timeout_seconds: float = 15.0
     routing_cache_size: int = 128
     rural_detour_factor: float = 1.28
     rural_average_speed_kmh: float = 42.0
