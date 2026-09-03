@@ -372,11 +372,15 @@ export const getDemandForecast = (days = 7) =>
   authenticatedRequest<DemandForecast>(`/analytics/forecast?days=${days}`)
 export const getRoutingStatus = () => authenticatedRequest<RoutingStatus>('/routing/status')
 export const getCurrentWeather = () => authenticatedRequest<CurrentWeather>('/weather/current')
-export const optimizeScenario = (profile: 'standard-v1' | 'bidirectional-v2' = 'bidirectional-v2') =>
+export const optimizeScenario = (
+  profile: 'standard-v1' | 'bidirectional-v2' = 'bidirectional-v2',
+  scenarioId?: string,
+) =>
   authenticatedRequest<OptimizeResult>('/optimize', {
     method: 'POST',
     body: JSON.stringify({
       profile,
+      ...(scenarioId ? { scenario_id: scenarioId } : {}),
       strategy: 'balanced',
       ai_assisted: true,
       candidate_count: 1,

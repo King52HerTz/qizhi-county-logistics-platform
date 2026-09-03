@@ -326,7 +326,8 @@ async function refreshWeather() {
 }
 
 async function synchronizeOperationalSnapshot(force = false) {
-  if (!authenticated.value || snapshotSyncing || loading.value) return
+  // 执行中心由自身按角色加载审批/驾驶员任务，不应被全局驾驶舱快照阻塞。
+  if (!authenticated.value || activeView.value === 'execution' || snapshotSyncing || loading.value) return
   snapshotSyncing = true
   try {
     const currentScenario = await getScenario()
@@ -366,7 +367,9 @@ async function runOptimization() {
   loading.value = true
   error.value = ''
   try {
-    result.value = await optimizeScenario()
+    // 订单申请审核后会激活新的 master-data 场景；求解必须使用当前场景，
+    // 否则驾驶员看到的是旧快照，且新场景没有最近运行记录时会触发无权限求解。
+    result.value = await optimizeScenario('bidirectional-v2', scenario.value?.id)
     selectedRoute.value = 0
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : '优化失败'
@@ -646,6 +649,13 @@ async function checkAIConnection() {
 
 async function initializePlatform() {
   loading.value = true
+  error.value = ''
+  // 执行中心有独立的任务接口和权限模型。驾驶员/调度员直接进入该页面时，
+  // 不需要先加载驾驶舱的预测、路网快照或求解结果。
+  if (activeView.value === 'execution') {
+    loading.value = false
+    return
+  }
   try {
     scenario.value = await getScenario()
     const latestResult = await getLatestRun(scenario.value.id)
@@ -656,7 +666,9 @@ async function initializePlatform() {
     if (latestResult) {
       result.value = latestResult
     } else {
-      await runOptimization()
+      if (sessionRole.value === 'admin' || sessionRole.value === 'dispatcher') {
+        await runOptimization()
+      }
     }
     loading.value = false
   } catch (cause) {
@@ -719,6 +731,14 @@ onBeforeUnmount(() => {
 
 watch(() => route.name, () => {
   activeView.value = routeView()
+  if (activeView.value === 'execution') {
+    loading.value = false
+    return
+  }
+  if (!scenario.value || !result.value) {
+    void initializePlatform()
+    return
+  }
   void synchronizeOperationalSnapshot()
 })
 </script>
@@ -1176,6 +1196,18 @@ watch(() => route.name, () => {
             </template>
           </div>
         </template>
+      </section>
+
+      <section v-else-if="activeView === 'execution'" class="content">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow"><Sparkles :size="14" /> 县域物流 · 智能协同优化</p>
+            <h1>{{ pageTitle }}</h1>
+            <p>审批下发的车辆任务与驾驶员执行状态</p>
+          </div>
+        </div>
+        <div v-if="error" class="error"><AlertTriangle :size="17" />{{ error }}</div>
+        <ExecutionCenter @session-change="role => authenticated = role === 'admin'" />
       </section>
 
       <div v-else class="loader"><BrainCircuit :size="34" /><b>正在连接祁智运调度引擎</b><span>加载县域节点、订单与车辆约束...</span></div>
