@@ -158,6 +158,16 @@ AI 解释/复核（可选）
 - 增加驾驶员下一站导航、OSRM 真实距离和不可用回退；
 - 目前阶段性文档已到第 18 阶段，之后以导航、执行加载和演示稳定性修复为主，并不代表生产级交付完成。
 
+### 阶段 19：冷链仓储共享与全程温控（最小实现）
+
+- 新增 cold_stores、cold_store_bookings、temperature_sensors、temperature_readings、temperature_alerts 五张表和迁移 0016；
+- 冷链仓储共享调度：演示冷库台账（绑定标准场景节点）、预冷/短储/中转预约、当日剩余库容校验与利用率看板；
+- 全程温控监测预警：车载/库内采集点、模拟温度时序（SHA-256 派生确定性扰动，含受控升温越限段）、阈值越限 + 滚动残差（z>2.5σ）双通道预警、确认处置闭环；
+- 新增 `/api/v1/cold-chain/*` 接口组（读取限内部运营角色，写操作审计），前端新增"冷链仓储""温控监测"两个页面（admin/dispatcher）；
+- demo_reset 纳入新表清理，序列重置改为参数化 setval，删除循环改为逐表显式调用；
+- 同步修复既有硬编码凭据扫描项：测试口令与 AI 备用 Key 改为运行时生成，psql 绑定变量更名；
+- 边界：库容为研究资料汇总口径、温度为受控模拟数据，均不代表实时库存或真实传感；预警不替代 OR-Tools 硬约束。接口契约见 `docs/COLD_CHAIN.md`。
+
 ## 5. 关键修复记录（当前基线）
 
 以下为最近的代表性提交，完整历史以 `git log` 为准：
@@ -252,6 +262,7 @@ AI 解释/复核（可选）
 - API：`docs/API.md`
 - 验收：`docs/ACCEPTANCE.md`
 - 用户订单闭环：`docs/ORDER_REQUESTS.md`
+- 冷链模块：`docs/COLD_CHAIN.md`
 - 参考资料接入：`docs/REFERENCE_DATA_INTEGRATION.md`
 - 分享演示：`docs/SHARE_DEMO.md`
 - 近期阶段：`docs/PHASE13_DEVELOPMENT.md` 至 `docs/PHASE17_DEVELOPMENT.md`、`docs/phase18-ai-orchestration-and-transparent-scoring.md`
