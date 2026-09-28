@@ -10,7 +10,12 @@ async function settle(page) {
 }
 
 async function main() {
-  const browser = await chromium.launch({ headless: true })
+  const browser = await chromium.launch({
+    headless: true,
+    // Reuse a locally installed browser when the bundled Playwright browser
+    // is not present (common on a fresh delivery machine).
+    executablePath: process.env.PW_EXECUTABLE_PATH || undefined,
+  })
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 })
   page.on('dialog', dialog => dialog.accept())
   await page.addInitScript(() => localStorage.setItem('qizhi_operation_guide_v1', 'completed'))
@@ -35,6 +40,12 @@ async function main() {
     ['07-experiments.png', '/experiments'],
     ['08-master-data.png', '/master-data/orders'],
     ['09-settings-ai.png', '/settings/ai'],
+    ['14-settings-map.png', '/settings/map'],
+    ['15-settings-users.png', '/settings/users'],
+    ['16-settings-audit.png', '/settings/audit'],
+    ['17-readiness.png', '/readiness'],
+    ['18-scenarios.png', '/scenarios'],
+    ['19-history.png', '/history'],
   ]
   for (const [filename, route] of routes) {
     await page.goto(`${baseUrl}${route}`, { waitUntil: 'networkidle' })
