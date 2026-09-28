@@ -1280,3 +1280,127 @@ class ExperimentView(BaseModel):
 
 class ExperimentList(BaseModel):
     items: list[ExperimentView]
+
+
+class ColdStoreView(BaseModel):
+    id: str
+    name: str
+    store_type: Literal["county_hub", "township", "field_precool"]
+    node_id: str | None
+    node_name: str | None
+    temperature_zone: Literal["chilled", "frozen", "ambient"]
+    capacity_tons: int
+    booked_tons: float
+    available_tons: float
+    shared: bool
+    contact: str | None
+    status: str
+    remark: str | None
+    latest_temperature_c: float | None
+    latest_recorded_at: datetime | None
+
+
+class ColdStoreList(BaseModel):
+    items: list[ColdStoreView]
+
+
+class ColdStoreBookingCreate(BaseModel):
+    cold_store_id: str = Field(min_length=1, max_length=32)
+    order_id: str | None = Field(default=None, max_length=32)
+    booking_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    purpose: Literal["precool", "short_storage", "transit"] = "precool"
+    tons: float = Field(gt=0, le=10000)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class ColdStoreBookingView(BaseModel):
+    id: int
+    cold_store_id: str
+    cold_store_name: str
+    order_id: str | None
+    booking_date: str
+    purpose: Literal["precool", "short_storage", "transit"]
+    tons: float
+    status: Literal["reserved", "active", "completed", "cancelled"]
+    note: str | None
+    created_by: str | None
+    created_at: datetime
+
+
+class ColdStoreBookingList(BaseModel):
+    items: list[ColdStoreBookingView]
+
+
+class TemperatureSensorView(BaseModel):
+    id: str
+    name: str
+    sensor_type: Literal["vehicle", "storage"]
+    vehicle_id: str | None
+    vehicle_plate: str | None
+    cold_store_id: str | None
+    cold_store_name: str | None
+    target_low_c: float
+    target_high_c: float
+    status: str
+    latest_temperature_c: float | None
+    latest_recorded_at: datetime | None
+
+
+class TemperatureSensorList(BaseModel):
+    items: list[TemperatureSensorView]
+
+
+class TemperatureReadingView(BaseModel):
+    sensor_id: str
+    recorded_at: datetime
+    temperature_c: float
+    humidity_pct: float | None
+    context: Literal["outbound", "in_transit", "inbound", "storage"]
+
+
+class TemperatureReadingList(BaseModel):
+    sensor_id: str
+    target_low_c: float
+    target_high_c: float
+    items: list[TemperatureReadingView]
+
+
+class TemperatureAlertView(BaseModel):
+    id: int
+    sensor_id: str
+    reading_id: int | None
+    level: Literal["info", "warning", "critical"]
+    alert_type: Literal["threshold_breach", "anomaly_trend"]
+    message: str
+    measured_c: float | None
+    threshold_c: float | None
+    deviation_c: float | None
+    status: Literal["open", "acknowledged", "resolved"]
+    acknowledged_by: str | None
+    acknowledged_at: datetime | None
+    created_at: datetime
+
+
+class TemperatureAlertList(BaseModel):
+    items: list[TemperatureAlertView]
+
+
+class TemperatureOverview(BaseModel):
+    sensor_total: int
+    active_sensors: int
+    reading_total: int
+    open_alerts: int
+    critical_alerts: int
+    shared_stores: int
+
+
+class TemperatureSimulateRequest(BaseModel):
+    hours: int = Field(default=6, ge=1, le=48)
+
+
+class TemperatureSimulateResult(BaseModel):
+    sensors: int
+    readings_created: int
+    alerts_created: int
+    window_hours: int
+    note: str

@@ -838,3 +838,198 @@ class DispatchTransitionRecord(Base):
         Index("dispatch_transitions_assignment_id_idx", "assignment_id"),
         Index("dispatch_transitions_actor_id_idx", "actor_id"),
     )
+
+
+class ColdStoreRecord(Base):
+    """冷链仓储资源台账：县域共用库、乡镇库与田头预冷点。"""
+
+    __tablename__ = "cold_stores"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    store_type: Mapped[str] = mapped_column(String(24), nullable=False, default="county_hub")
+    node_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("logistics_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    temperature_zone: Mapped[str] = mapped_column(String(16), nullable=False, default="chilled")
+    capacity_tons: Mapped[int] = mapped_column(Integer, nullable=False)
+    shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    contact: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+    node: Mapped[NodeRecord | None] = relationship()
+
+    __table_args__ = (
+        CheckConstraint("capacity_tons > 0", name="cold_stores_capacity_positive"),
+        CheckConstraint(
+            "store_type in ('county_hub','township','field_precool')",
+            name="cold_stores_type_check",
+        ),
+        CheckConstraint(
+            "temperature_zone in ('chilled','frozen','ambient')",
+            name="cold_stores_zone_check",
+        ),
+        CheckConstraint(
+            "status in ('active','maintenance','closed')",
+            name="cold_stores_status_check",
+        ),
+        Index("cold_stores_node_id_idx", "node_id"),
+        Index("cold_stores_status_idx", "status", "shared"),
+    )
+
+
+class ColdStoreBookingRecord(Base):
+    """冷链仓储共享预约：预冷、短储与中转占库记录。"""
+
+    __tablename__ = "cold_store_bookings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    cold_store_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("cold_stores.id", ondelete="RESTRICT"), nullable=False
+    )
+    order_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True
+    )
+    booking_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(24), nullable=False, default="precool")
+    tons: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="reserved")
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+    cold_store: Mapped[ColdStoreRecord] = relationship()
+    order: Mapped[OrderRecord | None] = relationship()
+
+    __table_args__ = (
+        CheckConstraint("tons > 0", name="cold_store_bookings_tons_positive"),
+        CheckConstraint(
+            "purpose in ('precool','short_storage','transit')",
+            name="cold_store_bookings_purpose_check",
+        ),
+        CheckConstraint(
+            "status in ('reserved','active','completed','cancelled')",
+            name="cold_store_bookings_status_check",
+        ),
+        Index("cold_store_bookings_store_date_idx", "cold_store_id", "booking_date"),
+        Index("cold_store_bookings_status_idx", "status"),
+    )
+
+
+class TemperatureSensorRecord(Base):
+    """全程温控采集点：冷链车载传感器与库内温度传感器。"""
+
+    __tablename__ = "temperature_sensors"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    sensor_type: Mapped[str] = mapped_column(String(16), nullable=False, default="vehicle")
+    vehicle_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True
+    )
+    cold_store_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("cold_stores.id", ondelete="SET NULL"), nullable=True
+    )
+    target_low_c: Mapped[Decimal] = mapped_column(Numeric(4, 1), nullable=False, default=Decimal("0.0"))
+    target_high_c: Mapped[Decimal] = mapped_column(Numeric(4, 1), nullable=False, default=Decimal("4.0"))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+    vehicle: Mapped[VehicleRecord | None] = relationship()
+    cold_store: Mapped[ColdStoreRecord | None] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            "sensor_type in ('vehicle','storage')",
+            name="temperature_sensors_type_check",
+        ),
+        CheckConstraint("target_high_c > target_low_c", name="temperature_sensors_range_check"),
+        CheckConstraint(
+            "status in ('active','inactive')",
+            name="temperature_sensors_status_check",
+        ),
+        Index("temperature_sensors_vehicle_idx", "vehicle_id"),
+        Index("temperature_sensors_store_idx", "cold_store_id"),
+    )
+
+
+class TemperatureReadingRecord(Base):
+    """温度时序读数：出库、在途、入库与库内存储环节的采集值。"""
+
+    __tablename__ = "temperature_readings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sensor_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("temperature_sensors.id", ondelete="CASCADE"), nullable=False
+    )
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    temperature_c: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    humidity_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    context: Mapped[str] = mapped_column(String(24), nullable=False, default="in_transit")
+    assignment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("driver_assignments.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        CheckConstraint(
+            "context in ('outbound','in_transit','inbound','storage')",
+            name="temperature_readings_context_check",
+        ),
+        Index("temperature_readings_sensor_time_idx", "sensor_id", "recorded_at"),
+    )
+
+
+class TemperatureAlertRecord(Base):
+    """温控预警：阈值越限与趋势异常（统计残差）两类告警。"""
+
+    __tablename__ = "temperature_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sensor_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("temperature_sensors.id", ondelete="CASCADE"), nullable=False
+    )
+    reading_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("temperature_readings.id", ondelete="SET NULL"), nullable=True
+    )
+    level: Mapped[str] = mapped_column(String(16), nullable=False, default="warning")
+    alert_type: Mapped[str] = mapped_column(String(24), nullable=False, default="threshold_breach")
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    measured_c: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    threshold_c: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    deviation_c: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    acknowledged_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "level in ('info','warning','critical')",
+            name="temperature_alerts_level_check",
+        ),
+        CheckConstraint(
+            "alert_type in ('threshold_breach','anomaly_trend')",
+            name="temperature_alerts_type_check",
+        ),
+        CheckConstraint(
+            "status in ('open','acknowledged','resolved')",
+            name="temperature_alerts_status_check",
+        ),
+        Index("temperature_alerts_status_created_idx", "status", "created_at"),
+        Index("temperature_alerts_sensor_created_idx", "sensor_id", "created_at"),
+    )

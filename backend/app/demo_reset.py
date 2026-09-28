@@ -10,6 +10,8 @@ from app.experiment_service import run_experiment
 from app.models import (
     AlgorithmExperimentRecord,
     AuditLogRecord,
+    ColdStoreBookingRecord,
+    ColdStoreRecord,
     DataImportBatchRecord,
     DispatchPlanRecord,
     DispatchTransitionRecord,
@@ -22,6 +24,9 @@ from app.models import (
     OrderRequestRecord,
     ScenarioTransitionRecord,
     ScenarioVersionRecord,
+    TemperatureAlertRecord,
+    TemperatureReadingRecord,
+    TemperatureSensorRecord,
     UserRecord,
     VehicleRecord,
 )
@@ -41,24 +46,27 @@ def reset_demo_data() -> dict[str, object]:
     initialize_database()
 
     with SessionLocal() as session:
-        for model in (
-            DispatchTransitionRecord,
-            DriverAssignmentRecord,
-            DispatchPlanRecord,
-            EventRecord,
-            OptimizationRunRecord,
-            AlgorithmExperimentRecord,
-            ScenarioTransitionRecord,
-            ScenarioVersionRecord,
-            NodeCoordinateRevisionRecord,
-            DataImportBatchRecord,
-            OrderRequestRecord,
-            OrderRecord,
-            VehicleRecord,
-            NodeRecord,
-            AuditLogRecord,
-        ):
-            session.execute(delete(model))
+        # 逐表清理演示业务数据：外键级联顺序从执行闭环到基础数据，最后清审计。
+        session.query(TemperatureAlertRecord).delete()
+        session.query(TemperatureReadingRecord).delete()
+        session.query(TemperatureSensorRecord).delete()
+        session.query(ColdStoreBookingRecord).delete()
+        session.query(ColdStoreRecord).delete()
+        session.query(DispatchTransitionRecord).delete()
+        session.query(DriverAssignmentRecord).delete()
+        session.query(DispatchPlanRecord).delete()
+        session.query(EventRecord).delete()
+        session.query(OptimizationRunRecord).delete()
+        session.query(AlgorithmExperimentRecord).delete()
+        session.query(ScenarioTransitionRecord).delete()
+        session.query(ScenarioVersionRecord).delete()
+        session.query(NodeCoordinateRevisionRecord).delete()
+        session.query(DataImportBatchRecord).delete()
+        session.query(OrderRequestRecord).delete()
+        session.query(OrderRecord).delete()
+        session.query(VehicleRecord).delete()
+        session.query(NodeRecord).delete()
+        session.query(AuditLogRecord).delete()
         if session.bind is not None and session.bind.dialect.name == "postgresql":
             for sequence in (
                 "data_import_batches_id_seq",
@@ -72,7 +80,11 @@ def reset_demo_data() -> dict[str, object]:
                 "driver_assignments_id_seq",
                 "dispatch_transitions_id_seq",
             ):
-                session.execute(text(f"ALTER SEQUENCE {sequence} RESTART WITH 1"))
+                # setval 以绑定参数接收序列名，不把标识符拼接进 SQL 文本。
+                session.execute(
+                    text("SELECT setval(:sequence_name, 1, false)"),
+                    {"sequence_name": sequence},
+                )
         session.commit()
 
         seed_demo_data(session)

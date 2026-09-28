@@ -58,6 +58,7 @@ from app.models import (
     OrderRequestRecord,
     ScenarioTransitionRecord,
     ScenarioVersionRecord,
+    TemperatureSensorRecord,
     UserRecord,
     VehicleRecord,
 )
@@ -69,6 +70,19 @@ from app.master_data_service import (
     commit_order_import,
     preview_order_import,
     quality_report,
+)
+from app.cold_chain_service import (
+    ColdStoreBookingError,
+    acknowledge_alert,
+    create_booking,
+    ensure_demo_assets,
+    list_alerts,
+    list_bookings,
+    list_cold_stores,
+    list_readings,
+    list_sensors,
+    simulate_temperature_stream,
+    temperature_overview,
 )
 from app.navigation_service import NavigationRouteError, build_assignment_navigation
 from app.repository import (
@@ -177,6 +191,17 @@ from app.schemas import (
     ScenarioVersionView,
     ScenarioSpatialStatus,
     RoutingStatus,
+    ColdStoreBookingCreate,
+    ColdStoreBookingList,
+    ColdStoreBookingView,
+    ColdStoreList,
+    TemperatureAlertList,
+    TemperatureAlertView,
+    TemperatureOverview,
+    TemperatureReadingList,
+    TemperatureSensorList,
+    TemperatureSimulateRequest,
+    TemperatureSimulateResult,
     TokenResponse,
 )
 from app.security import (
@@ -203,6 +228,7 @@ async def lifespan(_: FastAPI):
     initialize_database()
     with SessionLocal() as session:
         seed_demo_data(session)
+        ensure_demo_assets(session)
     yield
 
 
@@ -3909,3 +3935,150 @@ def job_status(
     result = task.result if task.successful() and isinstance(task.result, dict) else None
     error = str(task.result) if task.failed() else None
     return AsyncJobStatus(task_id=task_id, status=task.status, result=result, error=error)
+
+
+# ---------------------------------------------------------------------------
+# 冷链仓储共享调度与全程温控监测预警
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/cold-chain/stores", response_model=ColdStoreList)
+def get_cold_chain_stores(
+    _: UserRecord = Depends(operations_reader),
+    session: Session = Depends(get_db),
+) -> ColdStoreList:
+    # 演示重置会清空冷库台账，这里幂等补种以保证页面在恢复后可直接使用。
+    ensure_demo_assets(session)
+    return ColdStoreList(items=list_cold_stores(session))
+
+
+@app.get("/api/v1/cold-chain/bookings", response_model=ColdStoreBookingList)
+def get_cold_chain_bookings(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: UserRecord = Depends(operations_reader),
+    session: Session = Depends(get_db),
+) -> ColdStoreBookingList:
+    return ColdStoreBookingList(items=list_bookings(session, limit=limit))
+
+
+@app.post("/api/v1/cold-chain/bookings", response_model=ColdStoreBookingView, status_code=201)
+def create_cold_chain_booking(
+    payload: ColdStoreBookingCreate,
+    request: Request,
+    user: UserRecord = Depends(dispatcher_user),
+    session: Session = Depends(get_db),
+) -> ColdStoreBookingView:
+    try:
+        booking = create_booking(session, payload, actor_username=user.username)
+    except ColdStoreBookingError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    _audit(
+        session,
+        category="cold_chain",
+        action="create_cold_store_booking",
+        actor=user,
+        request=request,
+        resource_type="cold_store_booking",
+        resource_id=str(booking["id"]),
+        detail={"cold_store_id": booking["cold_store_id"], "tons": booking["tons"], "purpose": booking["purpose"]},
+    )
+    session.commit()
+    return ColdStoreBookingView(**booking)
+
+
+@app.get("/api/v1/cold-chain/sensors", response_model=TemperatureSensorList)
+def get_temperature_sensors(
+    _: UserRecord = Depends(operations_reader),
+    session: Session = Depends(get_db),
+) -> TemperatureSensorList:
+    ensure_demo_assets(session)
+    return TemperatureSensorList(items=list_sensors(session))
+
+
+@app.get("/api/v1/cold-chain/sensors/{sensor_id}/readings", response_model=TemperatureReadingList)
+def get_temperature_readings(
+    sensor_id: str,
+    limit: int = Query(default=120, ge=1, le=240),
+    _: UserRecord = Depends(operations_reader),
+    session: Session = Depends(get_db),
+) -> TemperatureReadingList:
+    sensor = session.get(TemperatureSensorRecord, sensor_id)
+    if sensor is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="温控采集点不存在")
+    return TemperatureReadingList(
+        sensor_id=sensor.id,
+        target_low_c=float(sensor.target_low_c),
+        target_high_c=float(sensor.target_high_c),
+        items=list_readings(session, sensor_id, limit=limit),
+    )
+
+
+@app.get("/api/v1/cold-chain/alerts", response_model=TemperatureAlertList)
+def get_temperature_alerts(
+    alert_status: str | None = Query(default=None),
+    limit: int = Query(default=80, ge=1, le=200),
+    _: UserRecord = Depends(operations_reader),
+    session: Session = Depends(get_db),
+) -> TemperatureAlertList:
+    return TemperatureAlertList(items=list_alerts(session, status=alert_status, limit=limit))
+
+
+@app.post("/api/v1/cold-chain/alerts/{alert_id}/acknowledge", response_model=TemperatureAlertView)
+def acknowledge_temperature_alert(
+    alert_id: int,
+    request: Request,
+    user: UserRecord = Depends(dispatcher_user),
+    session: Session = Depends(get_db),
+) -> TemperatureAlertView:
+    alert = acknowledge_alert(session, alert_id, actor_username=user.username)
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="温控预警不存在")
+    _audit(
+        session,
+        category="cold_chain",
+        action="acknowledge_temperature_alert",
+        actor=user,
+        request=request,
+        resource_type="temperature_alert",
+        resource_id=str(alert.id),
+        detail={"level": alert.level, "alert_type": alert.alert_type},
+    )
+    session.commit()
+    return alert
+
+
+@app.post("/api/v1/cold-chain/temperature/simulate", response_model=TemperatureSimulateResult)
+def simulate_cold_chain_temperature(
+    request: Request,
+    payload: TemperatureSimulateRequest | None = None,
+    user: UserRecord = Depends(dispatcher_user),
+    session: Session = Depends(get_db),
+) -> TemperatureSimulateResult:
+    ensure_demo_assets(session)
+    hours = payload.hours if payload else 6
+    result = simulate_temperature_stream(session, hours=hours)
+    _audit(
+        session,
+        category="cold_chain",
+        action="simulate_temperature_stream",
+        actor=user,
+        request=request,
+        resource_type="temperature_readings",
+        resource_id=None,
+        detail={
+            "hours": hours,
+            "readings_created": result["readings_created"],
+            "alerts_created": result["alerts_created"],
+        },
+    )
+    session.commit()
+    return TemperatureSimulateResult(**result)
+
+
+@app.get("/api/v1/cold-chain/overview", response_model=TemperatureOverview)
+def get_cold_chain_overview(
+    _: UserRecord = Depends(operations_reader),
+    session: Session = Depends(get_db),
+) -> TemperatureOverview:
+    ensure_demo_assets(session)
+    return temperature_overview(session)
