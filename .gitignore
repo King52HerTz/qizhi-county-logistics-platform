@@ -69,3 +69,6 @@ desktop.ini
 *.docx
 *.doc
 *.pptx
+
+# 本地留存的过程方案文档，按维护者要求不入库
+docs/design/ch6-restructure-plan.md
