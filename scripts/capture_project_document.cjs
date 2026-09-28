@@ -38,6 +38,8 @@ async function main() {
     ['05-events.png', '/events'],
     ['06-execution.png', '/execution'],
     ['07-experiments.png', '/experiments'],
+    ['29-cold-chain-storage.png', '/cold-chain'],
+    ['30-temperature-monitor.png', '/cold-monitor'],
     ['08-master-data.png', '/master-data/orders'],
     ['09-settings-ai.png', '/settings/ai'],
     ['14-settings-map.png', '/settings/map'],

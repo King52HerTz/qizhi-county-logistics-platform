@@ -1,0 +1,8 @@
+{
+  "name": "qizhi-scripts-tools",
+  "private": true,
+  "description": "本地工具脚本依赖（截图等），不参与平台运行时",
+  "dependencies": {
+    "playwright": "^1.55.0"
+  }
+}
