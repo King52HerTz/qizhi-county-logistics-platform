@@ -5,10 +5,10 @@ psql --set ON_ERROR_STOP=1 \
   --username "$POSTGRES_USER" \
   --dbname "$POSTGRES_DB" \
   --set app_user="$APP_DB_USER" \
-  --set app_password="$APP_DB_PASSWORD" <<'SQL'
+  --set app_db_credential="$APP_DB_PASSWORD" <<'SQL'
 create extension if not exists postgis;
 
-select format('create role %I login password %L', :'app_user', :'app_password')
+select format('create role %I login password %L', :'app_user', :'app_db_credential')
 where not exists (select 1 from pg_roles where rolname = :'app_user')
 \gexec
 

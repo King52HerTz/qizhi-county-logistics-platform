@@ -1,5 +1,7 @@
 from io import BytesIO
 import json
+import secrets
+import string
 from pathlib import Path
 from uuid import uuid4
 
@@ -33,6 +35,17 @@ from app.data.scenario import get_scenario
 from app.solver import solve_scenario
 from app.spatial import gcj02_to_wgs84, haversine_m, inside_qidong_bounds
 from app.schemas import CurrentWeather, OptimizeRequest
+
+
+def generated_strong_password() -> str:
+    """运行时生成符合强度策略的测试口令，避免在仓库中固化口令字面量。"""
+    body = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+    return f"Qz1{body}a!"
+
+
+def generated_weak_password() -> str:
+    """生成缺少大写字母与特殊字符的口令，用于验证强度策略会拒绝。"""
+    return "weak-" + secrets.token_hex(4)
 
 
 @pytest.fixture(scope="module")
@@ -342,7 +355,7 @@ def test_public_registration_creates_least_privilege_account(client: TestClient)
         json={
             "username": username,
             "display_name": "新注册用户",
-            "password": "StrongPass2026!",
+            "password": generated_strong_password(),
             "agreement_accepted": True,
         },
     )
@@ -370,7 +383,7 @@ def test_public_registration_rejects_duplicate_weak_and_privileged_payloads(
     valid_payload = {
         "username": username,
         "display_name": "安全测试用户",
-        "password": "StrongPass2026!",
+        "password": generated_strong_password(),
         "agreement_accepted": True,
     }
     assert client.post("/api/v1/auth/register", json=valid_payload).status_code == 201
@@ -1045,6 +1058,7 @@ def test_managed_ai_connections_lifecycle(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    backup_api_key = secrets.token_urlsafe(24)
     created = client.post(
         "/api/v1/ai/configs",
         json={
@@ -1053,7 +1067,7 @@ def test_managed_ai_connections_lifecycle(
             "provider": "openai-compatible",
             "base_url": "https://backup.example.invalid/v1",
             "model_name": "backup-model",
-            "api_key": "test-backup-api-key-placeholder-123456",
+            "api_key": backup_api_key,
             "enabled": False,
             "temperature": 0.3,
         },
@@ -1062,7 +1076,7 @@ def test_managed_ai_connections_lifecycle(
     created_payload = created.json()
     assert created_payload["name"] == "备用推理服务"
     assert created_payload["enabled"] is False
-    assert "test-backup-api-key-placeholder-123456" not in created.text
+    assert backup_api_key not in created.text
 
     listed = client.get("/api/v1/ai/configs")
     assert listed.status_code == 200
@@ -1101,7 +1115,7 @@ def test_enterprise_user_governance_and_audit_log(client: TestClient) -> None:
             "username": username,
             "display_name": "运营测试账号",
             "role": "dispatcher",
-            "password": "weak-password",
+            "password": generated_weak_password(),
             "is_active": True,
         },
     )
@@ -1113,7 +1127,7 @@ def test_enterprise_user_governance_and_audit_log(client: TestClient) -> None:
             "username": username,
             "display_name": "运营测试账号",
             "role": "dispatcher",
-            "password": "StrongPassword2026!",
+            "password": generated_strong_password(),
             "is_active": True,
         },
     )
@@ -1142,7 +1156,7 @@ def test_enterprise_user_governance_and_audit_log(client: TestClient) -> None:
 
     reset = client.post(
         f"/api/v1/users/{user['id']}/reset-password",
-        json={"password": "RotatedPassword2026!"},
+        json={"password": generated_strong_password()},
     )
     assert reset.status_code == 204
 
@@ -1472,7 +1486,7 @@ def test_user_order_request_review_converts_and_isolated(client: TestClient) -> 
         json={
             "username": username,
             "display_name": "订单申请客户",
-            "password": "StrongPass2026!",
+            "password": generated_strong_password(),
             "agreement_accepted": True,
         },
     )
