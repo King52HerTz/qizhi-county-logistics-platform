@@ -31,6 +31,8 @@ const DecisionCockpit = defineAsyncComponent(() => import('./components/Decision
 const ExecutionCenter = defineAsyncComponent(() => import('./components/ExecutionCenter.vue'))
 const SystemSettings = defineAsyncComponent(() => import('./components/SystemSettings.vue'))
 const OrderRequestCenter = defineAsyncComponent(() => import('./components/OrderRequestCenter.vue'))
+const ColdChainStorage = defineAsyncComponent(() => import('./components/ColdChainStorage.vue'))
+const TemperatureMonitor = defineAsyncComponent(() => import('./components/TemperatureMonitor.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -43,7 +45,7 @@ if (demoResetRequested) {
 let snapshotTimer: number | undefined
 let weatherTimer: number | undefined
 let snapshotSyncing = false
-type PlatformView = 'overview' | 'dispatch' | 'events' | 'execution' | 'experiments' | 'history' | 'masterData' | 'scenarios' | 'readiness' | 'settings' | 'orderRequests'
+type PlatformView = 'overview' | 'dispatch' | 'events' | 'execution' | 'experiments' | 'history' | 'masterData' | 'scenarios' | 'readiness' | 'settings' | 'orderRequests' | 'coldChain' | 'coldMonitor'
 type GuidedStep = {
   eyebrow: string
   title: string
@@ -232,6 +234,8 @@ const pageTitle = computed(() => ({
   readiness: '运营评估中心',
   settings: '系统设置与服务配置',
   orderRequests: '用户订单申请中心',
+  coldChain: '冷链仓储共享调度',
+  coldMonitor: '全程温控监测预警',
 }[activeView.value]))
 const crumbTitle = computed(() => ({
   overview: '运营总览',
@@ -245,6 +249,8 @@ const crumbTitle = computed(() => ({
   readiness: '运营能力评估',
   settings: '系统设置',
   orderRequests: '订单申请',
+  coldChain: '冷链仓储共享',
+  coldMonitor: '全程温控监测',
 }[activeView.value]))
 const pageDescription = computed(() =>
   activeView.value === 'overview'
@@ -265,6 +271,8 @@ function go(view: PlatformView) {
     readiness: '/readiness',
     settings: '/settings/ai',
     orderRequests: '/order-requests',
+    coldChain: '/cold-chain',
+    coldMonitor: '/cold-monitor',
   }
   return router.push(paths[view])
 }
@@ -757,6 +765,8 @@ watch(() => route.name, () => {
         <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher' || sessionRole === 'driver'" class="nav-item" data-guide="execution-nav" :class="{ active: activeView === 'execution' }" @click="go('execution')"><Truck :size="18" /><span>执行中心</span></button>
         <button v-if="sessionRole === 'admin'" class="nav-item" :class="{ active: activeView === 'orderRequests' }" @click="go('orderRequests')"><FileSpreadsheet :size="18" /><span>订单申请</span></button>
         <button v-if="sessionRole === 'admin'" class="nav-item" :class="{ active: activeView === 'scenarios' }" @click="showScenarios"><Warehouse :size="18" /><span>场景管理</span></button>
+        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'coldChain' }" @click="go('coldChain')"><Snowflake :size="18" /><span>冷链仓储</span></button>
+        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'coldMonitor' }" @click="go('coldMonitor')"><Thermometer :size="18" /><span>温控监测</span></button>
         <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'experiments' }" @click="go('experiments')"><FlaskConical :size="18" /><span>算法评估</span></button>
         <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'masterData' }" @click="go('masterData')"><Boxes :size="18" /><span>基础数据</span></button>
         <button class="nav-item" :class="{ active: activeView === 'history' }" @click="showHistory"><Database :size="18" /><span>方案历史</span></button>
@@ -948,6 +958,14 @@ watch(() => route.name, () => {
 
         <template v-else-if="activeView === 'orderRequests'">
           <OrderRequestCenter mode="admin" />
+        </template>
+
+        <template v-else-if="activeView === 'coldChain'">
+          <ColdChainStorage />
+        </template>
+
+        <template v-else-if="activeView === 'coldMonitor'">
+          <TemperatureMonitor />
         </template>
 
         <template v-else-if="activeView === 'history'">

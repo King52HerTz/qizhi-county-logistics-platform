@@ -28,6 +28,16 @@ import type {
   ManagedUser,
   ManagedUserList,
   UserCreateInput,
+  ColdStoreBookingInput,
+  ColdStoreBookingList,
+  ColdStoreBookingView,
+  ColdStoreList,
+  TemperatureAlertList,
+  TemperatureAlertView,
+  TemperatureOverview,
+  TemperatureReadingList,
+  TemperatureSensorList,
+  TemperatureSimulateResult,
   UserUpdateInput,
   AuditLogList,
   MasterDataSummary,
@@ -607,3 +617,34 @@ export const disableMapConfig = (id: number) =>
   authenticatedRequest<MapConfigView>(`/map/configs/${id}/disable`, { method: 'POST' })
 export const testMapConfig = (id: number) =>
   authenticatedRequest<AIConnectionTestResponse>(`/map/configs/${id}/test`, { method: 'POST' })
+
+export const getColdChainStores = () =>
+  authenticatedRequest<ColdStoreList>('/cold-chain/stores')
+export const getColdChainBookings = (limit = 50) =>
+  authenticatedRequest<ColdStoreBookingList>(`/cold-chain/bookings?limit=${limit}`)
+export const createColdChainBooking = (payload: ColdStoreBookingInput) =>
+  authenticatedRequest<ColdStoreBookingView>('/cold-chain/bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+export const getColdChainOverview = () =>
+  authenticatedRequest<TemperatureOverview>('/cold-chain/overview')
+export const getTemperatureSensors = () =>
+  authenticatedRequest<TemperatureSensorList>('/cold-chain/sensors')
+export const getTemperatureReadings = (sensorId: string, limit = 120) =>
+  authenticatedRequest<TemperatureReadingList>(
+    `/cold-chain/sensors/${encodeURIComponent(sensorId)}/readings?limit=${limit}`,
+  )
+export const getTemperatureAlerts = (status?: string, limit = 80) =>
+  authenticatedRequest<TemperatureAlertList>(
+    `/cold-chain/alerts?limit=${limit}${status ? `&alert_status=${status}` : ''}`,
+  )
+export const acknowledgeTemperatureAlert = (alertId: number) =>
+  authenticatedRequest<TemperatureAlertView>(`/cold-chain/alerts/${alertId}/acknowledge`, {
+    method: 'POST',
+  })
+export const simulateTemperatureStream = (hours = 6) =>
+  authenticatedRequest<TemperatureSimulateResult>('/cold-chain/temperature/simulate', {
+    method: 'POST',
+    body: JSON.stringify({ hours }),
+  })

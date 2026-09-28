@@ -1087,3 +1087,128 @@ export interface MapRuntimeConfig {
   map_style: 'normal' | 'whitesmoke' | 'fresh' | 'light'
   service_host?: string
 }
+
+export type ColdStoreType = 'county_hub' | 'township' | 'field_precool'
+export type ColdTemperatureZone = 'chilled' | 'frozen' | 'ambient'
+
+export interface ColdStoreView {
+  id: string
+  name: string
+  store_type: ColdStoreType
+  node_id: string | null
+  node_name: string | null
+  temperature_zone: ColdTemperatureZone
+  capacity_tons: number
+  booked_tons: number
+  available_tons: number
+  shared: boolean
+  contact: string | null
+  status: string
+  remark: string | null
+  latest_temperature_c: number | null
+  latest_recorded_at: string | null
+}
+
+export interface ColdStoreList {
+  items: ColdStoreView[]
+}
+
+export type ColdStorePurpose = 'precool' | 'short_storage' | 'transit'
+
+export interface ColdStoreBookingInput {
+  cold_store_id: string
+  order_id?: string | null
+  booking_date: string
+  purpose: ColdStorePurpose
+  tons: number
+  note?: string | null
+}
+
+export interface ColdStoreBookingView {
+  id: number
+  cold_store_id: string
+  cold_store_name: string
+  order_id: string | null
+  booking_date: string
+  purpose: ColdStorePurpose
+  tons: number
+  status: 'reserved' | 'active' | 'completed' | 'cancelled'
+  note: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface ColdStoreBookingList {
+  items: ColdStoreBookingView[]
+}
+
+export interface TemperatureSensorView {
+  id: string
+  name: string
+  sensor_type: 'vehicle' | 'storage'
+  vehicle_id: string | null
+  vehicle_plate: string | null
+  cold_store_id: string | null
+  cold_store_name: string | null
+  target_low_c: number
+  target_high_c: number
+  status: string
+  latest_temperature_c: number | null
+  latest_recorded_at: string | null
+}
+
+export interface TemperatureSensorList {
+  items: TemperatureSensorView[]
+}
+
+export interface TemperatureReadingView {
+  sensor_id: string
+  recorded_at: string
+  temperature_c: number
+  humidity_pct: number | null
+  context: 'outbound' | 'in_transit' | 'inbound' | 'storage'
+}
+
+export interface TemperatureReadingList {
+  sensor_id: string
+  target_low_c: number
+  target_high_c: number
+  items: TemperatureReadingView[]
+}
+
+export interface TemperatureAlertView {
+  id: number
+  sensor_id: string
+  reading_id: number | null
+  level: 'info' | 'warning' | 'critical'
+  alert_type: 'threshold_breach' | 'anomaly_trend'
+  message: string
+  measured_c: number | null
+  threshold_c: number | null
+  deviation_c: number | null
+  status: 'open' | 'acknowledged' | 'resolved'
+  acknowledged_by: string | null
+  acknowledged_at: string | null
+  created_at: string
+}
+
+export interface TemperatureAlertList {
+  items: TemperatureAlertView[]
+}
+
+export interface TemperatureOverview {
+  sensor_total: number
+  active_sensors: number
+  reading_total: number
+  open_alerts: number
+  critical_alerts: number
+  shared_stores: number
+}
+
+export interface TemperatureSimulateResult {
+  sensors: number
+  readings_created: number
+  alerts_created: number
+  window_hours: number
+  note: string
+}

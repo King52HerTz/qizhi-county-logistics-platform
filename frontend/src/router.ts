@@ -20,6 +20,8 @@ export const router = createRouter({
     { path: '/dispatch', name: 'dispatch', component: PlatformShell, meta: { roles: ['admin', 'dispatcher'] } },
     { path: '/events', name: 'events', component: PlatformShell, meta: { roles: ['admin', 'dispatcher'] } },
     { path: '/execution', name: 'execution', component: PlatformShell, meta: { roles: ['admin', 'dispatcher', 'driver'] } },
+    { path: '/cold-chain', name: 'coldChain', component: PlatformShell, meta: { roles: ['admin', 'dispatcher'] } },
+    { path: '/cold-monitor', name: 'coldMonitor', component: PlatformShell, meta: { roles: ['admin', 'dispatcher'] } },
     { path: '/experiments', name: 'experiments', component: PlatformShell, meta: { roles: ['admin', 'dispatcher'] } },
     { path: '/history', name: 'history', component: PlatformShell, meta: { roles: ['admin', 'dispatcher', 'driver', 'viewer'] } },
     {
