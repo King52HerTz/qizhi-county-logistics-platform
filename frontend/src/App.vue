@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import {
-  Activity, AlertTriangle, Boxes, BrainCircuit, ChevronRight, CircleCheckBig, CircleHelp, Clock3,
+  Activity, AlertTriangle, Boxes, BrainCircuit, ChevronDown, ChevronRight, CircleCheckBig, CircleHelp, Clock3,
   CloudSun, Database, Download, FileSpreadsheet, Gauge, KeyRound, LayoutDashboard,
   FlaskConical, LockKeyhole, LogOut, MapPinned, Menu, Play, RefreshCw, Route, Satellite,
-  ChartNoAxesCombined, ServerCog, Settings2, ShieldCheck, Sparkles, Truck, UploadCloud, Warehouse,
+  ChartNoAxesCombined, ServerCog, Settings2, ShieldCheck, Snowflake, Sparkles, Thermometer, Truck, UploadCloud, Warehouse,
 } from '@lucide/vue'
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MetricCompare from './components/MetricCompare.vue'
 import OperationGuide from './components/OperationGuide.vue'
@@ -46,6 +46,9 @@ let snapshotTimer: number | undefined
 let weatherTimer: number | undefined
 let snapshotSyncing = false
 type PlatformView = 'overview' | 'dispatch' | 'events' | 'execution' | 'experiments' | 'history' | 'masterData' | 'scenarios' | 'readiness' | 'settings' | 'orderRequests' | 'coldChain' | 'coldMonitor'
+type NavigationGroupKey = 'operations' | 'orders' | 'dispatch' | 'scenarios' | 'evaluation' | 'masterData'
+type NavigationItem = { view: PlatformView; label: string; icon: Component; guide?: string }
+type NavigationGroup = { key: NavigationGroupKey; label: string; icon: Component; items: NavigationItem[] }
 type GuidedStep = {
   eyebrow: string
   title: string
@@ -117,6 +120,19 @@ const runHistory = ref<RunSummary[]>([])
 const authenticated = ref(hasSession())
 const sessionRole = ref(getSessionRole())
 const sessionUser = ref(getSessionUser())
+const SIDEBAR_COLLAPSED_KEY = 'qizhi_sidebar_collapsed_v1'
+const storedSidebarState = localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+const sidebarCollapsed = ref(storedSidebarState === null
+  ? window.matchMedia('(max-width: 760px)').matches
+  : storedSidebarState === 'true')
+const expandedNavigationGroups = reactive<Record<NavigationGroupKey, boolean>>({
+  operations: true,
+  orders: true,
+  dispatch: true,
+  scenarios: true,
+  evaluation: true,
+  masterData: true,
+})
 const authBusy = ref(false)
 const aiBusy = ref(false)
 const aiTesting = ref(false)
@@ -578,6 +594,102 @@ async function showSettings() {
   await router.push('/settings/ai')
 }
 
+const navigationGroups = computed<NavigationGroup[]>(() => {
+  const canDispatch = sessionRole.value === 'admin' || sessionRole.value === 'dispatcher'
+  const canExecute = canDispatch || sessionRole.value === 'driver'
+  const canViewHistory = ['admin', 'dispatcher', 'driver', 'viewer'].includes(sessionRole.value)
+  const groups: NavigationGroup[] = [
+    {
+      key: 'operations',
+      label: '运营管理',
+      icon: LayoutDashboard,
+      items: [{ view: 'overview', label: '运营总览', icon: LayoutDashboard, guide: 'overview-nav' }],
+    },
+    {
+      key: 'orders',
+      label: '订单管理',
+      icon: FileSpreadsheet,
+      items: [
+        ...(sessionRole.value === 'admin' ? [{ view: 'orderRequests' as const, label: '订单申请', icon: FileSpreadsheet }] : []),
+        ...(canExecute ? [{ view: 'execution' as const, label: '执行中心', icon: Truck, guide: 'execution-nav' }] : []),
+      ],
+    },
+    {
+      key: 'dispatch',
+      label: '调度管理',
+      icon: MapPinned,
+      items: canDispatch ? [
+        { view: 'dispatch', label: '智能调度中心', icon: MapPinned },
+        { view: 'events', label: '动态事件处置', icon: Activity },
+      ] : [],
+    },
+    {
+      key: 'scenarios',
+      label: '场景管理',
+      icon: Warehouse,
+      items: [
+        ...(sessionRole.value === 'admin' ? [{ view: 'scenarios' as const, label: '场景管理', icon: Warehouse }] : []),
+        ...(canDispatch ? [
+          { view: 'coldChain' as const, label: '冷链仓储管理', icon: Snowflake },
+          { view: 'coldMonitor' as const, label: '实时温控监测', icon: Thermometer },
+        ] : []),
+      ],
+    },
+    {
+      key: 'evaluation',
+      label: '评估与档案管理',
+      icon: ChartNoAxesCombined,
+      items: [
+        ...(canDispatch ? [
+          { view: 'readiness' as const, label: '运营效果评估', icon: ChartNoAxesCombined },
+          { view: 'experiments' as const, label: '算法评估', icon: FlaskConical },
+        ] : []),
+        ...(canViewHistory ? [{ view: 'history' as const, label: '方案历史存档', icon: Database }] : []),
+      ],
+    },
+    {
+      key: 'masterData',
+      label: '基础数据管理',
+      icon: Boxes,
+      items: canDispatch ? [{ view: 'masterData', label: '基础数据中心', icon: Boxes }] : [],
+    },
+  ]
+  return groups.filter((group) => group.items.length > 0)
+})
+
+function groupContainsActiveView(group: NavigationGroup) {
+  return group.items.some((item) => item.view === activeView.value)
+}
+
+function updateSidebarCollapsed(value: boolean) {
+  sidebarCollapsed.value = value
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(value))
+}
+
+function toggleSidebar() {
+  updateSidebarCollapsed(!sidebarCollapsed.value)
+}
+
+function toggleNavigationGroup(group: NavigationGroup) {
+  if (sidebarCollapsed.value) {
+    updateSidebarCollapsed(false)
+    expandedNavigationGroups[group.key] = true
+    return
+  }
+  expandedNavigationGroups[group.key] = !expandedNavigationGroups[group.key]
+}
+
+async function selectNavigationItem(item: NavigationItem) {
+  if (window.matchMedia('(max-width: 760px)').matches) updateSidebarCollapsed(true)
+  if (item.view === 'scenarios') {
+    await showScenarios()
+  } else if (item.view === 'history') {
+    await showHistory()
+  } else {
+    await go(item.view)
+  }
+}
+
 async function adminLogin() {
   authBusy.value = true
   settingsMessage.value = ''
@@ -752,35 +864,64 @@ watch(() => route.name, () => {
 </script>
 
 <template>
-  <div class="app-shell">
-    <aside class="sidebar">
+  <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <aside class="sidebar" :aria-label="sidebarCollapsed ? '主导航已收起' : '主导航'">
       <div class="brand">
         <div class="brand-mark"><Route :size="25" /></div>
         <div><strong>祁智运</strong><span>AI LOGISTICS</span></div>
       </div>
-      <nav>
-        <button class="nav-item" data-guide="overview-nav" :class="{ active: activeView === 'overview' }" @click="go('overview')"><LayoutDashboard :size="18" /><span>运营总览</span></button>
-        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'dispatch' }" @click="go('dispatch')"><MapPinned :size="18" /><span>智能调度</span></button>
-        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'events' }" @click="go('events')"><Activity :size="18" /><span>动态事件</span><i v-if="activeEventCount">{{ activeEventCount }}</i></button>
-        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher' || sessionRole === 'driver'" class="nav-item" data-guide="execution-nav" :class="{ active: activeView === 'execution' }" @click="go('execution')"><Truck :size="18" /><span>执行中心</span></button>
-        <button v-if="sessionRole === 'admin'" class="nav-item" :class="{ active: activeView === 'orderRequests' }" @click="go('orderRequests')"><FileSpreadsheet :size="18" /><span>订单申请</span></button>
-        <button v-if="sessionRole === 'admin'" class="nav-item" :class="{ active: activeView === 'scenarios' }" @click="showScenarios"><Warehouse :size="18" /><span>场景管理</span></button>
-        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'coldChain' }" @click="go('coldChain')"><Snowflake :size="18" /><span>冷链仓储</span></button>
-        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'coldMonitor' }" @click="go('coldMonitor')"><Thermometer :size="18" /><span>温控监测</span></button>
-        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'experiments' }" @click="go('experiments')"><FlaskConical :size="18" /><span>算法评估</span></button>
-        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'masterData' }" @click="go('masterData')"><Boxes :size="18" /><span>基础数据</span></button>
-        <button class="nav-item" :class="{ active: activeView === 'history' }" @click="showHistory"><Database :size="18" /><span>方案历史</span></button>
-        <button v-if="sessionRole === 'admin' || sessionRole === 'dispatcher'" class="nav-item" :class="{ active: activeView === 'readiness' }" @click="go('readiness')"><ChartNoAxesCombined :size="18" /><span>运营评估</span></button>
+      <nav class="sidebar-nav" aria-label="业务功能">
+        <section v-for="group in navigationGroups" :key="group.key" class="nav-group">
+          <button
+            class="nav-group-toggle"
+            type="button"
+            :class="{ active: groupContainsActiveView(group) }"
+            :aria-label="group.label"
+            :aria-expanded="!sidebarCollapsed && expandedNavigationGroups[group.key]"
+            :aria-controls="`nav-group-${group.key}`"
+            :title="sidebarCollapsed ? group.label : undefined"
+            @click="toggleNavigationGroup(group)"
+          >
+            <span class="nav-group-icon"><component :is="group.icon" :size="18" /></span>
+            <span class="nav-group-label">{{ group.label }}</span>
+            <ChevronDown class="nav-group-chevron" :class="{ closed: !expandedNavigationGroups[group.key] }" :size="15" />
+          </button>
+          <div
+            :id="`nav-group-${group.key}`"
+            v-show="!sidebarCollapsed && expandedNavigationGroups[group.key]"
+            class="nav-group-items"
+          >
+            <button
+              v-for="item in group.items"
+              :key="item.view"
+              class="nav-item"
+              :class="{ active: activeView === item.view }"
+              :data-guide="item.guide"
+              :aria-current="activeView === item.view ? 'page' : undefined"
+              :title="sidebarCollapsed ? item.label : undefined"
+              type="button"
+              @click="selectNavigationItem(item)"
+            >
+              <component :is="item.icon" :size="17" />
+              <span>{{ item.label }}</span>
+              <i v-if="item.view === 'events' && activeEventCount">{{ activeEventCount }}</i>
+            </button>
+          </div>
+        </section>
       </nav>
       <div class="side-bottom">
-        <button v-if="sessionRole === 'admin'" class="nav-item" :class="{ active: activeView === 'settings' }" @click="showSettings"><Settings2 :size="18" /><span>系统设置</span></button>
-        <div class="operator"><div>{{ sessionUser.slice(0, 1) }}</div><p><strong>{{ sessionUser || '平台用户' }}</strong><span>{{ sessionRole === 'admin' ? '系统管理员' : sessionRole === 'driver' ? '配送驾驶员' : '运营调度员' }}</span></p></div>
+        <button v-if="sessionRole === 'admin'" class="nav-item side-settings" :class="{ active: activeView === 'settings' }" :title="sidebarCollapsed ? '系统设置' : undefined" type="button" @click="showSettings"><Settings2 :size="18" /><span>系统设置</span></button>
+        <div class="operator" :title="sidebarCollapsed ? sessionUser : undefined"><div>{{ sessionUser.slice(0, 1) }}</div><p><strong>{{ sessionUser || '平台用户' }}</strong><span>{{ sessionRole === 'admin' ? '系统管理员' : sessionRole === 'driver' ? '配送驾驶员' : '运营调度员' }}</span></p></div>
       </div>
     </aside>
+    <button v-if="!sidebarCollapsed" class="sidebar-scrim" type="button" aria-label="关闭导航栏" @click="updateSidebarCollapsed(true)"></button>
 
     <main>
       <header class="topbar">
-        <div class="crumb"><Menu :size="18" /><span>运营中心</span><ChevronRight :size="14" /><b>{{ crumbTitle }}</b></div>
+        <div class="crumb">
+          <button class="sidebar-toggle" type="button" :aria-label="sidebarCollapsed ? '显示侧边栏' : '隐藏侧边栏'" :title="sidebarCollapsed ? '显示侧边栏' : '隐藏侧边栏'" @click="toggleSidebar"><Menu :size="19" /></button>
+          <span>运营中心</span><ChevronRight :size="14" /><b>{{ crumbTitle }}</b>
+        </div>
         <div class="top-status">
           <span class="weather-status" :title="weatherTooltip"><CloudSun :size="16" />{{ weatherDisplay }}<small v-if="weather">{{ weather.weather_label }}</small></span>
           <span class="online"><i />引擎在线</span>
@@ -1248,22 +1389,50 @@ watch(() => route.name, () => {
 body { margin:0; min-width:0; min-height:100vh }
 button { font:inherit }
 .app-shell { display:flex; min-height:100vh }
-.sidebar { position:fixed; inset:0 auto 0 0; width:214px; padding:24px 15px 18px; background:#092f20; color:#dce9e2; display:flex; flex-direction:column; z-index:20; box-shadow:8px 0 30px rgba(14,52,35,.12) }
-.brand { display:flex; align-items:center; gap:11px; padding:0 9px 26px }
+.sidebar { position:fixed; inset:0 auto 0 0; width:214px; padding:24px 15px 18px; background:#092f20; color:#dce9e2; display:flex; flex-direction:column; z-index:20; box-shadow:8px 0 30px rgba(14,52,35,.12); transition:width .22s ease,transform .22s ease }
+.brand { display:flex; align-items:center; gap:11px; padding:0 9px 26px; flex:none }
 .brand-mark { width:40px; height:40px; display:grid; place-items:center; border-radius:12px; color:#103d2a; background:#f4b338 }
 .brand strong { display:block; font-size:21px; letter-spacing:2px; color:#fff }
 .brand span { display:block; margin-top:2px; font-size:8px; letter-spacing:2.3px; color:#8daf9d }
-nav { display:flex; flex-direction:column; gap:5px }
-.nav-item { width:100%; border:0; background:transparent; color:#a9c3b5; display:flex; align-items:center; gap:12px; padding:11px 13px; border-radius:9px; cursor:pointer; text-align:left }
+.sidebar-nav { display:flex; flex:1; min-height:0; flex-direction:column; gap:5px; overflow-y:auto; margin:0 -3px; padding:0 3px 8px; scrollbar-width:thin; scrollbar-color:#2b6047 transparent }
+.nav-group { flex:none }
+.nav-group-toggle { width:100%; min-height:38px; display:flex; align-items:center; gap:10px; padding:8px 10px; border:0; border-radius:8px; background:transparent; color:#a9c3b5; text-align:left; cursor:pointer }
+.nav-group-toggle:hover,.nav-group-toggle.active { color:#fff; background:#12472f }
+.nav-group-icon { width:20px; height:20px; display:grid; flex:none; place-items:center; color:#8eae9d }
+.nav-group-toggle.active .nav-group-icon,.nav-group-toggle:hover .nav-group-icon { color:#e9f4ed }
+.nav-group-label { flex:1; min-width:0; font-size:13px; line-height:1.35; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.nav-group-chevron { flex:none; color:#789b87; transition:transform .18s ease }
+.nav-group-chevron.closed { transform:rotate(-90deg) }
+.nav-group-items { position:relative; display:flex; flex-direction:column; gap:3px; margin:2px 0 5px 20px; padding:2px 0 2px 10px; border-left:1px dashed rgba(169,195,181,.38) }
+.nav-item { position:relative; width:100%; min-height:38px; border:0; background:transparent; color:#a9c3b5; display:flex; align-items:center; gap:9px; padding:8px 9px; border-radius:8px; cursor:pointer; text-align:left; font-size:14px; line-height:1.35 }
+.nav-group-items .nav-item::before { content:'›'; position:absolute; left:-15px; top:50%; transform:translateY(-52%); color:#819e8d; font-size:16px; line-height:1 }
 .nav-item:hover,.nav-item.active { color:#fff; background:#18573a }
+.nav-item svg { flex:none }
+.nav-item span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .nav-item i { margin-left:auto; display:grid; place-items:center; width:19px; height:19px; border-radius:99px; font-size:10px; font-style:normal; color:#fff; background:#df5d54 }
-.side-bottom { margin-top:auto }
+.side-bottom { flex:none; margin-top:8px; padding-top:9px; border-top:1px solid #24513d }
+.side-settings { min-height:38px }
 .operator { border-top:1px solid #24513d; margin-top:10px; padding:18px 7px 0; display:flex; align-items:center; gap:10px }
 .operator > div { width:34px; height:34px; display:grid; place-items:center; border-radius:50%; background:#eeb142; color:#183b29; font-weight:800 }
 .operator p { margin:0 }
 .operator strong,.operator span { display:block }
-.operator strong { font-size:12px; color:#f7fbf8 }.operator span { font-size:10px; color:#7fa28f; margin-top:3px }
+.operator strong { font-size:13px; color:#f7fbf8 }.operator span { font-size:11px; color:#7fa28f; margin-top:3px }
 .app-shell > main { width:calc(100% - 214px); margin-left:214px }
+.app-shell.sidebar-collapsed .sidebar { width:68px; padding:18px 8px 14px }
+.app-shell.sidebar-collapsed .brand { justify-content:center; padding:0 0 18px }
+.app-shell.sidebar-collapsed .brand>div:last-child,.app-shell.sidebar-collapsed .nav-group-label,.app-shell.sidebar-collapsed .nav-group-chevron,.app-shell.sidebar-collapsed .nav-item span,.app-shell.sidebar-collapsed .nav-item i,.app-shell.sidebar-collapsed .operator p { display:none }
+.app-shell.sidebar-collapsed .brand-mark { width:40px; height:40px }
+.app-shell.sidebar-collapsed .nav-group-toggle { justify-content:center; padding:9px 7px }
+.app-shell.sidebar-collapsed .nav-group-icon { width:24px; height:24px }
+.app-shell.sidebar-collapsed .nav-group-items { display:none!important }
+.app-shell.sidebar-collapsed .nav-item { justify-content:center; padding:9px 7px }
+.app-shell.sidebar-collapsed .side-bottom { padding-top:8px }
+.app-shell.sidebar-collapsed .operator { justify-content:center; padding:12px 0 0 }
+.app-shell.sidebar-collapsed > main { width:calc(100% - 68px); margin-left:68px }
+.sidebar-toggle { width:34px; height:34px; display:grid; flex:none; place-items:center; border:0; border-radius:8px; background:transparent; color:#738078; cursor:pointer }
+.sidebar-toggle:hover { color:#176f48; background:#eff6f1 }
+.sidebar-toggle:focus-visible,.nav-group-toggle:focus-visible,.nav-item:focus-visible { outline:2px solid #66b88c; outline-offset:2px }
+.sidebar-scrim { display:none }
 .topbar { height:58px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; background:#fff; border-bottom:1px solid #e3e8e3 }
 .crumb,.top-status,.top-status span { display:flex; align-items:center; gap:8px }
 .crumb { color:#8a928e; font-size:12px }.crumb b { color:#2b3931 }.top-status { color:#78817c; font-size:11px; gap:18px }
@@ -1310,12 +1479,13 @@ nav { display:flex; flex-direction:column; gap:5px }
 .scenario-layout{display:flex;flex-direction:column;gap:14px}.import-card{display:grid;grid-template-columns:auto minmax(300px,1fr) minmax(220px,300px) auto;align-items:center;gap:16px;padding:20px}.import-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:13px;background:#e8f4ec;color:#17794a}.import-copy .eyebrow{margin:0 0 3px}.import-copy h2{font-size:15px;color:#173c29;margin:0}.import-copy p:last-child{font-size:9px;color:#7e8982;margin:5px 0 0;line-height:1.5}.file-picker{height:42px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px dashed #a9c4b3;border-radius:9px;background:#f7faf8;color:#4f685a;font-size:10px;cursor:pointer;overflow:hidden}.file-picker span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.file-picker input{display:none}.scenario-message{margin:0}.version-card{padding:19px}.version-list{margin-top:15px;border:1px solid #e5ebe7;border-radius:10px;overflow:hidden}.version-row{display:grid;grid-template-columns:90px minmax(210px,1.5fr) 65px 65px 65px 130px 76px;align-items:center;gap:10px;min-height:66px;padding:0 14px;border-bottom:1px solid #e9eeea;background:#fff}.version-row:last-child{border:0}.version-row.active{background:#f1f8f3}.version-status{display:flex;align-items:center;gap:7px;font-size:9px;color:#7d8982}.version-status i{width:7px;height:7px;border-radius:50%;background:#a6aea9}.version-row.active .version-status{color:#16804d;font-weight:700}.version-row.active .version-status i{background:#23a568;box-shadow:0 0 0 3px #dff2e7}.version-name strong,.version-name span,.version-count b,.version-count span,.version-source span,.version-source small{display:block}.version-name strong{font-size:11px;color:#263d30}.version-name span{font-size:8px;color:#89938d;margin-top:4px}.version-count{text-align:center}.version-count b{font-size:14px;color:#1a5e3c}.version-count span{font-size:8px;color:#8b948f;margin-top:2px}.version-source span{font-size:9px;color:#52655a}.version-source small{font-size:8px;color:#929a95;margin-top:4px}.activate-button{justify-content:center;padding:7px 9px;font-size:9px}
 .settings-layout{display:grid;grid-template-columns:minmax(620px,1fr) 310px;gap:14px;align-items:start}.settings-main,.settings-side{display:flex;flex-direction:column;gap:14px}.ai-config-card{padding:22px}.settings-title{padding-bottom:18px;border-bottom:1px solid #e8ece8}.settings-title h2{font-size:18px;margin:5px 0}.settings-title .eyebrow{margin:0}.text-button{display:flex;align-items:center;gap:5px;border:0;background:transparent;color:#78867e;font-size:10px;cursor:pointer}.text-button:hover{color:#b64b45}.ai-form{margin-top:20px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px 18px}.form-grid label{display:flex;flex-direction:column;gap:7px}.form-grid label>span{font-size:10px;font-weight:700;color:#4b5d53}.form-grid label>span>b{float:right;color:#198050}.form-grid input:not([type="range"]):not([type="checkbox"]),.form-grid select,.admin-login input{width:100%;height:40px;border:1px solid #dce4de;border-radius:8px;padding:0 11px;background:#fbfcfb;color:#243b2f;outline:none}.form-grid input:focus,.form-grid select:focus,.admin-login input:focus{border-color:#2b8b5c;box-shadow:0 0 0 3px #e7f4ec}.span-two{grid-column:1/-1}.secret-field{position:relative}.secret-field svg{position:absolute;left:12px;top:13px;color:#799087}.secret-field input{padding-left:36px!important}.form-grid small{font-size:9px;color:#8b958f;line-height:1.5}.form-grid input[type="range"]{accent-color:#1b8050}.switch-row{flex-direction:row!important;align-items:center;justify-content:space-between;padding:3px 0}.switch-row span{display:flex;flex-direction:column;gap:4px}.switch-row input{width:38px;height:20px;accent-color:#1b8050}.form-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:24px;padding-top:17px;border-top:1px solid #edf0ed}.secondary{display:flex;align-items:center;gap:6px;border:1px solid #cfdcd3;padding:9px 14px;border-radius:9px;background:#fff;color:#296246;cursor:pointer}.secondary:hover{background:#f1f7f3}.secondary:disabled{opacity:.5;cursor:not-allowed}.settings-message{margin-top:14px;padding:10px 12px;border-radius:8px;font-size:10px}.settings-message.success{color:#176c43;background:#e8f5ed;border:1px solid #cde9d8}.settings-message.error{color:#a9403b;background:#fff0ef;border:1px solid #f0d0cd}.settings-message.info{color:#536b5e;background:#f1f5f2;border:1px solid #e0e7e2}.security-card,.connection-card,.data-boundary{padding:18px}.security-card{background:linear-gradient(145deg,#0d3d29,#145d3b);color:#fff;border:0}.security-mark{width:42px;height:42px;display:grid;place-items:center;border-radius:11px;color:#153b29;background:#f0b643}.security-card h3,.data-boundary h3{font-size:13px;margin:12px 0 7px}.security-card p,.data-boundary p,.connection-card p{font-size:9px;line-height:1.7;margin:0;color:#bfd4c8}.security-card ul{list-style:none;padding:13px 0 0;margin:13px 0 0;border-top:1px solid #2e674d}.security-card li{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:9px;color:#e6f0eb}.security-card li svg{color:#f2ba4a}.connection-card>span{display:block;font-size:9px;color:#849089}.connection-card>strong{display:flex;align-items:center;gap:7px;margin:8px 0;font-size:14px;color:#8a928d}.connection-card>strong i{width:8px;height:8px;border-radius:50%;background:#9ca5a0}.connection-card>strong.success{color:#16804d}.connection-card>strong.success i{background:#23a568;box-shadow:0 0 0 4px #e0f3e8}.connection-card>strong.failed{color:#bc4943}.connection-card>strong.failed i{background:#d75850;box-shadow:0 0 0 4px #f8e5e3}.connection-card p,.data-boundary p{color:#6d7a72}.connection-card small{display:block;margin-top:10px;font-size:8px;color:#929a95}.data-boundary{background:#fffaf0;border-color:#f0e3c8}.admin-login{grid-column:1/-1;width:430px;margin:55px auto;padding:30px}.login-icon{width:52px;height:52px;display:grid;place-items:center;border-radius:14px;background:#e9f4ed;color:#17794a}.admin-login .eyebrow{margin:18px 0 5px}.admin-login h2{margin:0;color:#173c29;font-size:21px}.login-copy{font-size:10px;color:#7b8780;line-height:1.7;margin:9px 0 20px}.admin-login form{display:flex;flex-direction:column;gap:14px}.admin-login label{display:flex;flex-direction:column;gap:7px}.admin-login label span{font-size:10px;font-weight:700;color:#4b5d53}.login-submit{margin-top:4px;justify-content:center;width:100%}
 .loader { height:calc(100vh - 58px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;color:#1b7047}.loader b{color:#234334}.loader span{font-size:11px;color:#87918b}
-@media(max-width:1250px){.bottom-grid,.event-grid{grid-template-columns:minmax(600px,1fr) 300px}.right-stack{grid-template-columns:1fr 1fr}.right-stack .routes{grid-column:1/-1}.settings-layout{grid-template-columns:minmax(560px,1fr) 280px}.import-card{grid-template-columns:auto 1fr 240px}.import-card>.primary{grid-column:3}.version-row{grid-template-columns:80px minmax(180px,1fr) 55px 55px 55px 110px 68px}.sidebar{width:190px}.app-shell > main{width:calc(100% - 190px);margin-left:190px}}
+@media(max-width:1250px){.bottom-grid,.event-grid{grid-template-columns:minmax(600px,1fr) 300px}.right-stack{grid-template-columns:1fr 1fr}.right-stack .routes{grid-column:1/-1}.settings-layout{grid-template-columns:minmax(560px,1fr) 280px}.import-card{grid-template-columns:auto 1fr 240px}.import-card>.primary{grid-column:3}.version-row{grid-template-columns:80px minmax(180px,1fr) 55px 55px 55px 110px 68px}.app-shell:not(.sidebar-collapsed) .sidebar{width:190px}.app-shell:not(.sidebar-collapsed)>main{width:calc(100% - 190px);margin-left:190px}}
 @media(max-width:760px){
-  .sidebar{width:68px;padding:16px 8px 14px}
-  .brand{justify-content:center;padding:0 0 18px}.brand>div:last-child,.nav-item span,.nav-item i,.operator p{display:none}
-  .brand-mark{width:38px;height:38px}.nav-item{justify-content:center;padding:11px 8px}.operator{justify-content:center;padding:14px 0 0}
-  .app-shell > main{width:calc(100% - 68px);margin-left:68px}
+  .sidebar{width:min(270px,85vw);padding:20px 15px 16px;transform:translateX(-100%)}
+  .app-shell:not(.sidebar-collapsed) .sidebar{width:min(270px,85vw);transform:translateX(0)}
+  .app-shell.sidebar-collapsed .sidebar{width:min(270px,85vw);padding:20px 15px 16px;transform:translateX(-100%)}
+  .app-shell>main,.app-shell.sidebar-collapsed>main{width:100%;margin-left:0}
+  .sidebar-scrim{position:fixed;inset:0;display:block;padding:0;border:0;background:rgba(6,28,19,.42);z-index:19;cursor:pointer}
   .topbar{height:54px;padding:0 12px}.top-status>span{display:none}.top-status{gap:6px}.top-user,.top-guide{padding:0 8px}.top-guide span{display:none}.crumb{gap:5px}
   .content{padding:16px 12px 20px}
   .workspace,.bottom-grid,.event-grid{grid-template-columns:minmax(0,1fr)}
@@ -1323,4 +1493,5 @@ nav { display:flex; flex-direction:column; gap:5px }
   .page-heading{align-items:flex-start;gap:12px;flex-direction:column}
   .page-heading>.primary{width:100%;justify-content:center}
 }
+@media(prefers-reduced-motion:reduce){.sidebar,.nav-group-chevron{transition:none}}
 </style>
